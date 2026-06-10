@@ -33,8 +33,34 @@ enum Snapshot {
         do {
             try png.write(to: URL(fileURLWithPath: path))
             print("快照已保存: \(path)")
+            printContentMargins(rep)
         } catch {
             FileHandle.standardError.write("快照写入失败: \(error)\n".data(using: .utf8)!)
         }
+    }
+
+    /// 打印模型轮廓到画面四边的距离（百分比），用于检查取景是否裁切
+    private static func printContentMargins(_ rep: NSBitmapImageRep) {
+        guard rep.bitsPerSample == 8, rep.hasAlpha, let data = rep.bitmapData else { return }
+        let w = rep.pixelsWide, h = rep.pixelsHigh
+        let spp = rep.samplesPerPixel, bpr = rep.bytesPerRow
+        var minX = w, maxX = -1, minY = h, maxY = -1
+        for y in 0..<h {
+            let row = data + y * bpr
+            for x in 0..<w where row[x * spp + spp - 1] > 8 {
+                if x < minX { minX = x }
+                if x > maxX { maxX = x }
+                if y < minY { minY = y }
+                if y > maxY { maxY = y }
+            }
+        }
+        guard maxX >= 0 else { return }
+        print(String(
+            format: "轮廓边距%%: 上 %.1f 左 %.1f 下 %.1f 右 %.1f",
+            Double(minY) / Double(h) * 100,
+            Double(minX) / Double(w) * 100,
+            Double(h - 1 - maxY) / Double(h) * 100,
+            Double(w - 1 - maxX) / Double(w) * 100
+        ))
     }
 }

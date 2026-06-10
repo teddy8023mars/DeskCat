@@ -213,7 +213,7 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
                 scaleXZ = 1 + 0.07 * p
             case ..<0.6: // 跳起拉伸
                 let p = (t - 0.2) / 0.4
-                posY = 0.28 * sin(p * .pi)
+                posY = 0.22 * sin(p * .pi)
                 scaleY = 1 + 0.1 * sin(p * .pi)
                 scaleXZ = 1 - 0.05 * sin(p * .pi)
             case ..<0.8: // 落地压缩

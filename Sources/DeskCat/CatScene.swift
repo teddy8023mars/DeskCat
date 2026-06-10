@@ -81,8 +81,9 @@ final class CatScene {
         camera.zFar = 50
         let cameraNode = SCNNode()
         cameraNode.camera = camera
-        cameraNode.position = SCNVector3(0, 0.55, 3.4)
-        cameraNode.look(at: SCNVector3(0, 0.1, 0))
+        // 取景留出安全边距：身体转动/摇曳/跳跃都不能碰到画面边缘
+        cameraNode.position = SCNVector3(0, 0.5, 3.9)
+        cameraNode.look(at: SCNVector3(0, -0.02, 0))
         scene.rootNode.addChildNode(cameraNode)
 
         let keyLight = SCNNode()
