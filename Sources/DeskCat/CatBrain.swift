@@ -29,7 +29,6 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
 
     // 靠近反应
     private var excited = false
-    private var lastHopAt: TimeInterval = 0
 
     // 眨眼（仅对有独立眼睛节点的形象生效）
     private var nextBlinkAt: TimeInterval = 0
@@ -49,16 +48,12 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
 
         let (yaw, pitch, distance) = mouseAngles()
 
-        // 鼠标靠近 → 兴奋状态
+        // 鼠标靠近 → 兴奋状态（转头更快、尾巴摇得欢，不跳）
         let nowExcited = distance < 220
-        if nowExcited && !excited && time - lastHopAt > 3 {
-            lastHopAt = time
+        if nowExcited && !excited {
             tailAmpTarget = 0.9
             tailSpeed = 7
             idleEndAt = time + 2.5
-            DispatchQueue.main.async { [hopNode = cat.hopNode] in
-                hopNode.runAction(CatBrain.hopAction())
-            }
         }
         excited = nowExcited
 
@@ -71,16 +66,13 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
             if time > nextIdleAt {
                 nextIdleAt = 0
                 idleEndAt = time + .random(in: 1.8...3.0)
-                switch Int.random(in: 0..<3) {
-                case 0: // 兴奋摇尾巴
+                // 空闲动作只有摇尾巴和歪头，不再自己乱跳；
+                // 泰迪熊没有尾巴，固定用歪头
+                if cat.tailBone != nil && Bool.random() {
                     tailAmpTarget = 0.8
                     tailSpeed = 6
-                case 1: // 好奇歪头
+                } else {
                     rollTarget = Float.random(in: 0.18...0.3) * (Bool.random() ? 1 : -1)
-                default: // 小跳
-                    DispatchQueue.main.async { [hopNode = cat.hopNode] in
-                        hopNode.runAction(CatBrain.hopAction())
-                    }
                 }
             }
         }
