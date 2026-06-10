@@ -64,7 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func setUpWindow(with catScene: CatScene) {
         let size = Self.windowSize
-        let origin = savedOrigin() ?? defaultOrigin(size: size)
+        // 恢复的位置也要做边缘检测（防止分辨率变化后留在屏幕外）
+        let origin = CatView.clamp(
+            origin: savedOrigin() ?? defaultOrigin(size: size),
+            size: CGSize(width: size, height: size),
+            near: nil
+        )
         let window = NSWindow(
             contentRect: CGRect(x: origin.x, y: origin.y, width: size, height: size),
             styleMask: [.borderless],

@@ -1,7 +1,7 @@
 import AppKit
 import SceneKit
 
-/// 每帧驱动小猫行为：头部跟随鼠标、尾巴摆动、呼吸、空闲小动作、鼠标靠近反应。
+/// 每帧驱动伴侣行为：弹簧头部跟随、眼神领先、尾巴/耳朵、呼吸摇曳、空闲小动作。
 final class CatBrain: NSObject, SCNSceneRendererDelegate {
     private let cat: CatScene
 
@@ -14,10 +14,16 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
     }
 
     private var lastTime: TimeInterval = -1
-    private var currentLook = simd_quatf(angle: 0, axis: [0, 1, 0])
+
+    // 头部弹簧动力学（欠阻尼 → 带一点回弹，更像活物）
+    private var yawAngle: Float = 0
+    private var yawVel: Float = 0
+    private var pitchAngle: Float = 0
+    private var pitchVel: Float = 0
+    private var rollCurrent: Float = 0
     private var currentBodyYaw: Float = 0
 
-    // 尾巴
+    // 尾巴（小猫）
     private var tailAmp: Float = 0.25
     private var tailAmpTarget: Float = 0.25
     private var tailSpeed: Float = 2.5
@@ -26,6 +32,10 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
     private var nextIdleAt: TimeInterval = 0
     private var idleEndAt: TimeInterval = 0
     private var rollTarget: Float = 0
+
+    // 耳朵抖动（泰迪熊）
+    private var earTwitchStart: TimeInterval = -1
+    private var twitchEarIndex = 0
 
     // 靠近反应
     private var excited = false
@@ -45,8 +55,9 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
     func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
         let dt = lastTime < 0 ? Float(1.0 / 60.0) : Float(min(time - lastTime, 0.1))
         lastTime = time
+        let t = Float(time)
 
-        let (yaw, pitch, distance) = mouseAngles()
+        let (targetYaw, targetPitch, distance) = mouseAngles()
 
         // 鼠标靠近 → 兴奋状态（转头更快、尾巴摇得欢，不跳）
         let nowExcited = distance < 220
@@ -66,31 +77,38 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
             if time > nextIdleAt {
                 nextIdleAt = 0
                 idleEndAt = time + .random(in: 1.8...3.0)
-                // 空闲动作只有摇尾巴和歪头，不再自己乱跳；
-                // 泰迪熊没有尾巴，固定用歪头
+                // 小猫：摇尾巴/歪头；泰迪熊：抖耳朵/歪头
                 if cat.tailBone != nil && Bool.random() {
                     tailAmpTarget = 0.8
                     tailSpeed = 6
+                } else if !cat.earNodes.isEmpty && Bool.random() {
+                    earTwitchStart = time
+                    twitchEarIndex = Int.random(in: 0..<cat.earNodes.count)
                 } else {
                     rollTarget = Float.random(in: 0.18...0.3) * (Bool.random() ? 1 : -1)
                 }
             }
         }
 
-        // 目标视线（世界空间，相机朝 -Z，猫面向 +Z）
-        let yawQ = simd_quatf(angle: yaw, axis: [0, 1, 0])
-        let pitchQ = simd_quatf(angle: -pitch, axis: [1, 0, 0])
-        let rollQ = simd_quatf(angle: rollTarget, axis: [0, 0, 1])
-        let target = yawQ * pitchQ * rollQ
+        // —— 头部弹簧（半隐式欧拉，欠阻尼带回弹）——
+        let stiffness: Float = excited ? 130 : 60
+        let omega = sqrt(stiffness)
+        let damping = 2 * 0.62 * omega
+        yawVel += (-stiffness * (yawAngle - targetYaw) - damping * yawVel) * dt
+        yawAngle += yawVel * dt
+        pitchVel += (-stiffness * (pitchAngle - targetPitch) - damping * pitchVel) * dt
+        pitchAngle += pitchVel * dt
+        rollCurrent += (rollTarget - rollCurrent) * (1 - exp(-6 * dt))
 
-        // 平滑插值，兴奋时反应更快
-        let k: Float = excited ? 14 : 7
-        let blend = 1 - exp(-k * dt)
-        currentLook = simd_slerp(currentLook, target, blend)
+        let currentLook = simd_quatf(angle: yawAngle, axis: [0, 1, 0])
+            * simd_quatf(angle: -pitchAngle, axis: [1, 0, 0])
+            * simd_quatf(angle: rollCurrent, axis: [0, 0, 1])
 
-        // 身体跟着轻微转向（头转得多，身体转得少）
-        currentBodyYaw += (yaw * 0.3 - currentBodyYaw) * (1 - exp(-4 * dt))
+        // 身体轻微跟转 + 缓慢摇曳
+        currentBodyYaw += (targetYaw * 0.3 - currentBodyYaw) * (1 - exp(-4 * dt))
+        let sway = sin(t * 0.7) * 0.015
         cat.yawNode.simdOrientation = simd_quatf(angle: currentBodyYaw, axis: [0, 1, 0])
+            * simd_quatf(angle: sway, axis: [0, 0, 1])
 
         // 把世界空间的视线旋转换算到头部骨骼的局部空间：
         // L' = (P⁻¹ · R · P) · L_rest，P 为父节点世界朝向
@@ -100,11 +118,35 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
             head.simdOrientation = local * cat.headRest
         }
 
-        // 尾巴摆动
+        // 眼神领先：头还没转到位时，眼珠先看向目标
+        if !cat.eyeNodes.isEmpty {
+            let leadYaw = max(-0.32, min(0.32, (targetYaw - yawAngle) * 0.9))
+            let leadPitch = max(-0.26, min(0.26, (targetPitch - pitchAngle) * 0.9))
+            let eyeQuat = simd_quatf(angle: leadYaw, axis: [0, 1, 0])
+                * simd_quatf(angle: -leadPitch, axis: [1, 0, 0])
+            for eye in cat.eyeNodes {
+                eye.simdOrientation = eyeQuat
+            }
+        }
+
+        // 尾巴摆动（小猫）
         tailAmp += (tailAmpTarget - tailAmp) * (1 - exp(-5 * dt))
         if let tail = cat.tailBone {
-            let wag = simd_quatf(angle: sin(Float(time) * tailSpeed) * tailAmp, axis: [0, 0, 1])
+            let wag = simd_quatf(angle: sin(t * tailSpeed) * tailAmp, axis: [0, 0, 1])
             tail.simdOrientation = cat.tailRest * wag
+        }
+
+        // 耳朵抖动（泰迪熊）：短促衰减的弹性缩放
+        if earTwitchStart >= 0, twitchEarIndex < cat.earNodes.count {
+            let elapsed = Float(time - earTwitchStart)
+            let ear = cat.earNodes[twitchEarIndex]
+            if elapsed < 0.6 {
+                let pulse = 1 + 0.16 * sin(elapsed * 32) * exp(-elapsed * 5)
+                ear.simdScale = simd_float3(1, pulse, 0.55)
+            } else {
+                ear.simdScale = simd_float3(1, 1, 0.55)
+                earTwitchStart = -1
+            }
         }
 
         // 眨眼：随机间隔压扁眼球 0.13 秒
@@ -122,12 +164,12 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
 
         // 呼吸起伏
         if let body = cat.bodyBone {
-            let breath = 1 + 0.015 * sin(Float(time) * 2.0)
+            let breath = 1 + 0.02 * sin(t * 2.0)
             body.simdScale = simd_float3(repeating: breath)
         }
     }
 
-    /// 返回鼠标相对小猫的偏航/俯仰角（弧度）和距离（屏幕点）
+    /// 返回鼠标相对头部的偏航/俯仰角（弧度）和距离（屏幕点）
     private func mouseAngles() -> (yaw: Float, pitch: Float, distance: Float) {
         guard let event = CGEvent(source: nil) else { return (0, 0, .greatestFiniteMagnitude) }
         let mouse = event.location // 全局坐标，主屏左上角原点，y 向下
@@ -156,7 +198,7 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
         )
     }
 
-    /// 卡通小跳：压缩 → 跳起拉伸 → 落地压缩 → 恢复
+    /// 卡通小跳：压缩 → 跳起拉伸 → 落地压缩 → 恢复（仅点击触发）
     static func hopAction() -> SCNAction {
         let duration = 0.55
         return SCNAction.customAction(duration: duration) { node, elapsed in
