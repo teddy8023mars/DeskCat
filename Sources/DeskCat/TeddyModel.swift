@@ -17,6 +17,7 @@ enum TeddyBuilder {
     // 配色（取自 Ted 2 剧照；SIMD 值供 SDF 顶点色使用）
     static let furC = SIMD3<Float>(0.73, 0.54, 0.33)       // 蜂蜜棕绒毛
     static let furLightC = SIMD3<Float>(0.89, 0.77, 0.60)  // 奶油色口鼻
+    static let browC = SIMD3<Float>(0.55, 0.37, 0.20)      // 眉毛（比毛色深，表情才能"读"出来）
     static let padC = SIMD3<Float>(0.55, 0.38, 0.23)
     static let suitC = SIMD3<Float>(0.25, 0.40, 0.53)      // 西装蓝
     static let shirtC = SIMD3<Float>(0.42, 0.56, 0.66)     // 内衬浅蓝
@@ -99,10 +100,10 @@ enum TeddyBuilder {
         var headBlob = SDFBlob()
         // 一整个宽圆的大块头——没有独立腮帮，宽度本身就是脸
         headBlob.add(blend: 0.1, color: furC, SDF.ellipsoid(center: [0, 0.36, 0], radii: [0.80, 0.64, 0.60]))
-        // 眉骨（眼镜上方两道独立隆起的绒毛丘——Ted 表情的灵魂）
+        // 眉毛（深色、舒展的缓拱——友好中性，不上挑不耷拉）
         for side: Float in [-1, 1] {
-            headBlob.add(blend: 0.04, color: furC, SDF.ellipsoid(
-                center: [side * 0.24, 0.66, 0.50], radii: [0.16, 0.055, 0.06]
+            headBlob.add(blend: 0.035, color: browC, SDF.ellipsoid(
+                center: [side * 0.25, 0.67, 0.50], radii: [0.165, 0.048, 0.055]
             ))
         }
         // 奶油色口鼻：上窄下宽，带 Ted 标志性的厚下巴
@@ -142,37 +143,42 @@ enum TeddyBuilder {
         nose.position = SCNVector3(0, 0.30, CGFloat(noseSurfZ + 0.012))
         head.addChildNode(nose)
 
-        // 缝线嘴：鼻下短竖线 + 宽幅浅弧下撇嘴
-        let mouthZ = CGFloat(headBlob.surfaceZ(x: 0, y: 0.10) + 0.006)
-        let stitch = node(SCNCylinder(radius: 0.012, height: 0.10), noseColor)
-        stitch.position = SCNVector3(0, 0.205, mouthZ - 0.01)
-        head.addChildNode(stitch)
-        for side: CGFloat in [-1, 1] {
-            let lipInner = node(SCNCylinder(radius: 0.012, height: 0.16), noseColor)
-            lipInner.position = SCNVector3(side * 0.078, 0.135, mouthZ)
-            lipInner.eulerAngles = SCNVector3(0.20, 0, side * 1.42)
-            head.addChildNode(lipInner)
-
-            let lipOuter = node(SCNCylinder(radius: 0.012, height: 0.13), noseColor)
-            lipOuter.position = SCNVector3(side * 0.205, 0.085, mouthZ - 0.045)
-            lipOuter.eulerAngles = SCNVector3(0.28, 0, side * 1.15)
-            head.addChildNode(lipOuter)
+        // 缝线嘴：鼻下竖线 + 微微上扬的连续浅弧（友好表情的关键）。
+        // 每个采样点用 surfaceZ 贴在口鼻曲面上，球关节连接保证平滑连续。
+        var smilePoints: [SIMD3<Float>] = []
+        for i in 0...10 {
+            let t = Float(i) / 10 * 2 - 1 // -1...1
+            let x = t * 0.21
+            let y = 0.125 + 0.055 * t * t // 抛物线开口向上 = 微笑
+            smilePoints.append([x, y, headBlob.surfaceZ(x: x, y: y) + 0.008])
         }
+        head.addChildNode(stitchLine(points: smilePoints, radius: 0.012, color: noseColor))
 
-        // 小黑豆眼（贴着口鼻上沿、间距宽——参考图里眼睛很小）
+        var creasePoints: [SIMD3<Float>] = []
+        for i in 0...4 {
+            let y = 0.245 - Float(i) / 4 * 0.115 // 鼻底到微笑中心
+            creasePoints.append([0, y, headBlob.surfaceZ(x: 0, y: y) + 0.008])
+        }
+        head.addChildNode(stitchLine(points: creasePoints, radius: 0.012, color: noseColor))
+
+        // 眼睛：加大 + 琥珀色虹膜 + 双高光——眼睛承载灵动感
         var eyes: [SCNNode] = []
         let eyeSurfZ = headBlob.surfaceZ(x: 0.22, y: 0.47)
         for side: CGFloat in [-1, 1] {
-            let eye = node(SCNSphere(radius: 0.06), irisColor)
-            eye.position = SCNVector3(side * 0.22, 0.47, CGFloat(eyeSurfZ - 0.008))
+            let eye = node(SCNSphere(radius: 0.078), NSColor(red: 0.40, green: 0.25, blue: 0.12, alpha: 1))
+            eye.position = SCNVector3(side * 0.22, 0.47, CGFloat(eyeSurfZ - 0.012))
 
-            let pupil = node(SCNSphere(radius: 0.03), .black)
-            pupil.position = SCNVector3(0, 0, 0.036)
+            let pupil = node(SCNSphere(radius: 0.042), .black)
+            pupil.position = SCNVector3(0, 0, 0.042)
             eye.addChildNode(pupil)
 
-            let highlight = node(SCNSphere(radius: 0.014), .white)
-            highlight.position = SCNVector3(0.015, 0.017, 0.052)
+            let highlight = node(SCNSphere(radius: 0.019), .white)
+            highlight.position = SCNVector3(0.020, 0.024, 0.064)
             eye.addChildNode(highlight)
+
+            let sparkle = node(SCNSphere(radius: 0.009), .white)
+            sparkle.position = SCNVector3(-0.020, -0.016, 0.070)
+            eye.addChildNode(sparkle)
 
             head.addChildNode(eye)
             eyes.append(eye)
@@ -215,6 +221,27 @@ enum TeddyBuilder {
         outer.windingRule = .nonZero
         outer.flatness = 0.0008
         return SCNShape(path: outer, extrusionDepth: 0.026)
+    }
+
+    /// 沿 3D 折线生成连续缝线：球关节 + 圆柱段
+    private static func stitchLine(points: [SIMD3<Float>], radius: CGFloat, color: NSColor) -> SCNNode {
+        let line = SCNNode()
+        for (i, p) in points.enumerated() {
+            let joint = node(SCNSphere(radius: radius), color)
+            joint.simdPosition = p
+            line.addChildNode(joint)
+
+            guard i + 1 < points.count else { continue }
+            let q = points[i + 1]
+            let dir = q - p
+            let length = simd_length(dir)
+            guard length > 1e-5 else { continue }
+            let segment = node(SCNCylinder(radius: radius, height: CGFloat(length)), color)
+            segment.simdPosition = (p + q) / 2
+            segment.simdOrientation = simd_quatf(from: [0, 1, 0], to: dir / length)
+            line.addChildNode(segment)
+        }
+        return line
     }
 
     private static func node(_ geometry: SCNGeometry, _ color: NSColor) -> SCNNode {
