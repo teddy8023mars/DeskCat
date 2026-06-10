@@ -31,6 +31,10 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
     private var excited = false
     private var lastHopAt: TimeInterval = 0
 
+    // 眨眼（仅对有独立眼睛节点的形象生效）
+    private var nextBlinkAt: TimeInterval = 0
+    private var blinkUntil: TimeInterval = 0
+
     /// 头部跟随的虚拟距离（屏幕点），越小转头越敏感
     private let virtualDistance: Float = 480
 
@@ -109,6 +113,19 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
         if let tail = cat.tailBone {
             let wag = simd_quatf(angle: sin(Float(time) * tailSpeed) * tailAmp, axis: [0, 0, 1])
             tail.simdOrientation = cat.tailRest * wag
+        }
+
+        // 眨眼：随机间隔压扁眼球 0.13 秒
+        if !cat.eyeNodes.isEmpty {
+            if nextBlinkAt == 0 { nextBlinkAt = time + .random(in: 1.5...4) }
+            if time > nextBlinkAt {
+                blinkUntil = time + 0.13
+                nextBlinkAt = time + .random(in: 2.5...6)
+            }
+            let lid: Float = time < blinkUntil ? 0.12 : 1
+            for eye in cat.eyeNodes {
+                eye.simdScale = simd_float3(1, lid, 1)
+            }
         }
 
         // 呼吸起伏

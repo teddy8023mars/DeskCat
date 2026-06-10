@@ -12,29 +12,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let windowSize: CGFloat = 260
     private static let posXKey = "DeskCatX"
     private static let posYKey = "DeskCatY"
+    private static let companionKey = "DeskCatCompanion"
+
+    private var kind: CompanionKind = .teddy
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        CatScene.loadAsset { [weak self] result in
+        kind = Self.initialKind()
+        CatScene.make(kind: kind) { [weak self] result in
             guard let self else { return }
             switch result {
-            case .success(let asset):
-                do {
-                    let catScene = try CatScene(asset: asset)
-                    self.catScene = catScene
-                    if let path = Self.snapshotPath() {
-                        Snapshot.render(scene: catScene, to: path)
-                        NSApp.terminate(nil)
-                    } else {
-                        self.setUpWindow(with: catScene)
-                        self.setUpStatusItem()
-                    }
-                } catch {
-                    self.fail(error)
+            case .success(let catScene):
+                self.catScene = catScene
+                if let path = Self.snapshotPath() {
+                    Snapshot.render(scene: catScene, to: path)
+                    NSApp.terminate(nil)
+                } else {
+                    self.setUpWindow(with: catScene)
+                    self.setUpStatusItem()
                 }
             case .failure(let error):
                 self.fail(error)
             }
         }
+    }
+
+    /// 形象优先级：命令行参数 > 上次选择 > 默认泰迪熊
+    private static func initialKind() -> CompanionKind {
+        let args = CommandLine.arguments
+        if args.contains("--cat") { return .cat }
+        if args.contains("--teddy") { return .teddy }
+        if let saved = UserDefaults.standard.string(forKey: companionKey),
+           let kind = CompanionKind(rawValue: saved) {
+            return kind
+        }
+        return .teddy
     }
 
     private func fail(_ error: Error) {
@@ -69,22 +80,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.delegate = self
 
         let view = CatView(frame: CGRect(x: 0, y: 0, width: size, height: size))
-        view.scene = catScene.scene
         view.backgroundColor = .clear
         view.antialiasingMode = .multisampling4X
         view.rendersContinuously = true
         view.isPlaying = true
 
-        let brain = CatBrain(cat: catScene)
-        brain.windowFrame = window.frame
-        view.delegate = brain
-
         view.onMoved = { [weak self] frame in
             self?.brain?.windowFrame = frame
             self?.saveOrigin(frame.origin)
         }
-        view.onPet = { [weak catScene] in
-            catScene?.hopNode.runAction(CatBrain.hopAction())
+        view.onPet = { [weak self] in
+            self?.catScene?.hopNode.runAction(CatBrain.hopAction())
         }
 
         window.contentView = view
@@ -92,6 +98,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         self.window = window
         self.catView = view
+        attach(catScene)
+    }
+
+    /// 把场景接到视图上并重建大脑（首次启动和切换形象共用）
+    private func attach(_ catScene: CatScene) {
+        guard let view = catView, let window else { return }
+        self.catScene = catScene
+        let brain = CatBrain(cat: catScene)
+        brain.windowFrame = window.frame
+        view.scene = catScene.scene
+        view.delegate = brain
         self.brain = brain
     }
 
@@ -102,9 +119,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.title = "🐱"
+        item.button?.title = kind == .teddy ? "🧸" : "🐱"
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "显示/隐藏小猫", action: #selector(toggleCat), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "显示/隐藏", action: #selector(toggleCat), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "切换形象（小猫/泰迪熊）", action: #selector(switchCompanion), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "重置位置", action: #selector(resetPosition), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "退出 DeskCat", action: #selector(quit), keyEquivalent: "q"))
@@ -119,6 +137,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.orderOut(nil)
         } else {
             window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    @objc private func switchCompanion() {
+        kind = kind == .teddy ? .cat : .teddy
+        UserDefaults.standard.set(kind.rawValue, forKey: Self.companionKey)
+        statusItem?.button?.title = kind == .teddy ? "🧸" : "🐱"
+        CatScene.make(kind: kind) { [weak self] result in
+            switch result {
+            case .success(let catScene):
+                self?.attach(catScene)
+            case .failure(let error):
+                self?.fail(error)
+            }
         }
     }
 

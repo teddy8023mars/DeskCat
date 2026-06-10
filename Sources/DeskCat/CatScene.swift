@@ -2,38 +2,58 @@ import AppKit
 import SceneKit
 import GLTFKit2
 
-/// 负责加载 GLB 模型、搭建场景（相机/灯光）、定位骨骼节点。
-final class CatScene {
-    let scene: SCNScene
+enum CompanionKind: String {
+    case cat
+    case teddy
+}
 
-    /// 层级：root → hopNode(跳跃/挤压) → yawNode(身体转向) → modelRoot(归一化缩放) → glTF 内容
+/// 负责搭建场景（相机/灯光/归一化）并暴露驱动所需的节点。
+/// 支持两种形象：GLB 小猫 / 代码生成的泰迪熊。
+final class CatScene {
+    let scene = SCNScene()
+
+    /// 层级：root → hopNode(跳跃/挤压) → yawNode(身体转向) → modelRoot(归一化缩放) → 模型内容
     let hopNode = SCNNode()
     let yawNode = SCNNode()
     let modelRoot = SCNNode()
 
-    let headBone: SCNNode?
-    let tailBone: SCNNode?
-    let bodyBone: SCNNode?
+    private(set) var headBone: SCNNode?
+    private(set) var tailBone: SCNNode?
+    private(set) var bodyBone: SCNNode?
+    private(set) var eyeNodes: [SCNNode] = []
 
-    let headRest: simd_quatf
-    let tailRest: simd_quatf
+    private(set) var headRest = simd_quatf(angle: 0, axis: [0, 1, 0])
+    private(set) var tailRest = simd_quatf(angle: 0, axis: [0, 1, 0])
 
-    init(asset: GLTFAsset) throws {
+    init(asset: GLTFAsset) {
         let gltfScene = SCNScene(gltfAsset: asset)
-
-        scene = SCNScene()
-        scene.background.contents = NSColor.clear
-
         for child in gltfScene.rootNode.childNodes {
             modelRoot.addChildNode(child)
         }
-
         // 漫画感：扁平着色，避免 PBR 在简单灯光下显脏
         modelRoot.enumerateHierarchy { node, _ in
             for material in node.geometry?.materials ?? [] {
                 material.lightingModel = .lambert
             }
         }
+        headBone = modelRoot.childNode(withName: "Head", recursively: true)
+        tailBone = modelRoot.childNode(withName: "Tail", recursively: true)
+        bodyBone = modelRoot.childNode(withName: "Body", recursively: true)
+        finishSetup()
+    }
+
+    init(teddy: TeddyModel) {
+        modelRoot.addChildNode(teddy.root)
+        headBone = teddy.head
+        bodyBone = teddy.body
+        eyeNodes = teddy.eyes
+        finishSetup()
+    }
+
+    private func finishSetup() {
+        scene.background.contents = NSColor.clear
+        headRest = headBone?.simdOrientation ?? simd_quatf(angle: 0, axis: [0, 1, 0])
+        tailRest = tailBone?.simdOrientation ?? simd_quatf(angle: 0, axis: [0, 1, 0])
 
         // 归一化：最大边长缩放到 2.0，中心移到原点
         let (bbMin, bbMax) = modelRoot.boundingBox
@@ -52,13 +72,7 @@ final class CatScene {
         hopNode.addChildNode(yawNode)
         scene.rootNode.addChildNode(hopNode)
 
-        headBone = modelRoot.childNode(withName: "Head", recursively: true)
-        tailBone = modelRoot.childNode(withName: "Tail", recursively: true)
-        bodyBone = modelRoot.childNode(withName: "Body", recursively: true)
-        headRest = headBone?.simdOrientation ?? simd_quatf(angle: 0, axis: [0, 1, 0])
-        tailRest = tailBone?.simdOrientation ?? simd_quatf(angle: 0, axis: [0, 1, 0])
-
-        // 相机：正面略偏上，营造"小猫坐在桌面看你"的视角
+        // 相机：正面略偏上，营造"坐在桌面看你"的视角
         let camera = SCNCamera()
         camera.fieldOfView = 38
         camera.zNear = 0.01
@@ -95,6 +109,18 @@ final class CatScene {
                 } else {
                     completion(.failure(maybeError ?? NSError(domain: "DeskCat", code: 2, userInfo: [NSLocalizedDescriptionKey: "模型加载失败"])))
                 }
+            }
+        }
+    }
+
+    /// 按形象类型构建场景（小猫需异步加载 GLB，泰迪熊同步生成）
+    static func make(kind: CompanionKind, completion: @escaping (Result<CatScene, Error>) -> Void) {
+        switch kind {
+        case .teddy:
+            completion(.success(CatScene(teddy: TeddyBuilder.build())))
+        case .cat:
+            loadAsset { result in
+                completion(result.map { CatScene(asset: $0) })
             }
         }
     }
