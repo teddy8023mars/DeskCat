@@ -81,22 +81,41 @@ final class CatScene {
         camera.zFar = 50
         let cameraNode = SCNNode()
         cameraNode.camera = camera
-        // 取景留出安全边距：身体转动/摇曳/跳跃都不能碰到画面边缘
-        cameraNode.position = SCNVector3(0, 0.5, 3.9)
+        // 长焦镜头（低 FOV 减少透视畸变，玩具感更强）；取景留安全边距
+        camera.fieldOfView = 30
+        cameraNode.position = SCNVector3(0, 0.55, 5.0)
         cameraNode.look(at: SCNVector3(0, -0.02, 0))
         scene.rootNode.addChildNode(cameraNode)
 
+        // 三点布光：主光（暖）+ 补光（冷）+ 轮廓光（照亮绒毛边缘）
         let keyLight = SCNNode()
         keyLight.light = SCNLight()
         keyLight.light!.type = .directional
-        keyLight.light!.intensity = 900
-        keyLight.eulerAngles = SCNVector3(-Double.pi / 5, Double.pi / 8, 0)
+        keyLight.light!.intensity = 850
+        keyLight.light!.color = NSColor(red: 1.0, green: 0.96, blue: 0.88, alpha: 1)
+        keyLight.eulerAngles = SCNVector3(-Double.pi / 5, Double.pi / 7, 0)
         scene.rootNode.addChildNode(keyLight)
+
+        let fillLight = SCNNode()
+        fillLight.light = SCNLight()
+        fillLight.light!.type = .directional
+        fillLight.light!.intensity = 300
+        fillLight.light!.color = NSColor(red: 0.85, green: 0.90, blue: 1.0, alpha: 1)
+        fillLight.eulerAngles = SCNVector3(-Double.pi / 12, -Double.pi / 4, 0)
+        scene.rootNode.addChildNode(fillLight)
+
+        let rimLight = SCNNode()
+        rimLight.light = SCNLight()
+        rimLight.light!.type = .directional
+        rimLight.light!.intensity = 500
+        rimLight.light!.color = NSColor(red: 1.0, green: 0.95, blue: 0.85, alpha: 1)
+        rimLight.eulerAngles = SCNVector3(Double.pi / 7, Double.pi - 0.4, 0)
+        scene.rootNode.addChildNode(rimLight)
 
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light!.type = .ambient
-        ambient.light!.intensity = 550
+        ambient.light!.intensity = 450
         scene.rootNode.addChildNode(ambient)
     }
 
