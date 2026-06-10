@@ -116,28 +116,44 @@ enum TeddyBuilder {
         // 脖子（藏进身体，转头时不露缝）
         headBlob.add(blend: 0.12, color: furC, SDF.capsule(from: [0, -0.12, 0], to: [0, 0.15, 0], radius: 0.32))
 
-        // ——— 立体嘴：玩偶的"凹腔嘴"结构 ———
+        // ——— 嘴：闭合的立体缝（参考 Ted 剧照——凹槽缝 + 周围的肉感结构） ———
         let mouthSurfZ = headBlob.surfaceZ(x: 0, y: 0.12)
-        let mouthInteriorC = SIMD3<Float>(0.18, 0.10, 0.09) // 嘴腔内的暖深色
-        // 下唇（前缘略缩进口鼻表面——上唇微微盖住下唇才是正确咬合，避免地包天）
-        headBlob.add(blend: 0.04, color: furLightC, SDF.ellipsoid(
-            center: [0, 0.005, mouthSurfZ - 0.075], radii: [0.15, 0.05, 0.07]
-        ))
-        // 挖出微笑形开口：往深处挖而不是向前顶
-        headBlob.subtract(blend: 0.03, color: mouthInteriorC, SDF.ellipsoid(
-            center: [0, 0.095, mouthSurfZ + 0.035], radii: [0.225, 0.048, 0.10]
-        ))
+        // 颊肉：嘴线上方两侧的鼓起（立体感来自嘴周围的结构）
         for side: Float in [-1, 1] {
-            headBlob.subtract(blend: 0.028, color: mouthInteriorC, SDF.sphere(
-                center: [side * 0.20, 0.155, mouthSurfZ + 0.005], radius: 0.042
+            headBlob.add(blend: 0.06, color: furLightC, SDF.ellipsoid(
+                center: [side * 0.11, 0.175, mouthSurfZ - 0.055], radii: [0.105, 0.085, 0.07]
             ))
         }
+        // 下巴鼓起（嘴线下方）
+        headBlob.add(blend: 0.07, color: furLightC, SDF.ellipsoid(
+            center: [0, -0.01, mouthSurfZ - 0.085], radii: [0.13, 0.08, 0.07]
+        ))
+        // 嘴缝：沿微笑曲线挖一道浅凹槽（阴影自然落进去，任何角度都立体）
+        let seamC = SIMD3<Float>(0.46, 0.33, 0.22) // 凹槽内的暖阴影色
+        var seamPts: [SIMD3<Float>] = []
+        for i in 0...10 {
+            let t = Float(i) / 10 * 2 - 1
+            let x = t * 0.215
+            let y = 0.105 + 0.05 * t * t
+            seamPts.append([x, y, headBlob.surfaceZ(x: x, y: y) + 0.016])
+        }
+        for i in 0..<(seamPts.count - 1) {
+            headBlob.subtract(blend: 0.018, color: seamC, SDF.capsule(
+                from: seamPts[i], to: seamPts[i + 1], radius: 0.026
+            ))
+        }
+        // 人中：鼻底到嘴缝的竖凹槽
+        let philtrumTop = SIMD3<Float>(0, 0.245, headBlob.surfaceZ(x: 0, y: 0.245) + 0.014)
+        let philtrumBottom = SIMD3<Float>(0, 0.13, headBlob.surfaceZ(x: 0, y: 0.13) + 0.014)
+        headBlob.subtract(blend: 0.016, color: seamC, SDF.capsule(
+            from: philtrumTop, to: philtrumBottom, radius: 0.02
+        ))
 
         let headGeometry = SDFMesh.geometry(
             blob: headBlob,
             boundsMin: [-1.00, -0.50, -0.80],
             boundsMax: [1.00, 1.15, 0.95],
-            resolution: 96
+            resolution: 116 // 嘴缝凹槽很细，需要更高的采样密度
         )
         head.addChildNode(SCNNode(geometry: headGeometry))
 
@@ -160,13 +176,6 @@ enum TeddyBuilder {
         nose.position = SCNVector3(0, 0.30, CGFloat(noseSurfZ + 0.012))
         head.addChildNode(nose)
 
-        // 鼻下竖缝线（人中），连到嘴的上沿
-        var creasePoints: [SIMD3<Float>] = []
-        for i in 0...4 {
-            let y = 0.245 - Float(i) / 4 * 0.06 // 鼻底到嘴上沿
-            creasePoints.append([0, y, headBlob.surfaceZ(x: 0, y: y) + 0.008])
-        }
-        head.addChildNode(stitchLine(points: creasePoints, radius: 0.011, color: noseColor))
 
         // 眼睛：加大 + 琥珀色虹膜 + 双高光——眼睛承载灵动感
         var eyes: [SCNNode] = []
