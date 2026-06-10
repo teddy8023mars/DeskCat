@@ -1,8 +1,8 @@
 import AppKit
 import SceneKit
 
-/// 代码生成的泰迪熊：独立头部节点（跟随鼠标）、可眨眼+转动的眼睛、方框眼镜、绒毛质感。
-/// 原型：金棕色绒毛、宽圆大头、突出的口鼻、下撇缝线嘴、方框眼镜、坐姿脚掌朝前。
+/// 代码生成的泰迪熊，原型为电影 Ted 2：姜糖色绒毛、宽脸大头、奶油色大口鼻、
+/// 眉骨、方框眼镜、宽缝线嘴、蓝色西装。独立头部节点跟随鼠标，眼睛可眨可转。
 struct TeddyModel {
     let root: SCNNode
     let head: SCNNode
@@ -12,13 +12,15 @@ struct TeddyModel {
 }
 
 enum TeddyBuilder {
-    // 配色（对齐原型：金蜂蜜棕，口鼻略浅）
-    static let fur = NSColor(red: 0.79, green: 0.56, blue: 0.31, alpha: 1)
-    static let furLight = NSColor(red: 0.87, green: 0.67, blue: 0.43, alpha: 1)
-    static let padColor = NSColor(red: 0.52, green: 0.36, blue: 0.22, alpha: 1)
-    static let noseColor = NSColor(red: 0.13, green: 0.09, blue: 0.07, alpha: 1)
-    static let irisColor = NSColor(red: 0.30, green: 0.19, blue: 0.11, alpha: 1)
+    // 配色（取自 Ted 2 剧照）
+    static let fur = NSColor(red: 0.76, green: 0.50, blue: 0.28, alpha: 1)       // 姜糖棕绒毛
+    static let furLight = NSColor(red: 0.90, green: 0.76, blue: 0.58, alpha: 1)  // 奶油色口鼻
+    static let padColor = NSColor(red: 0.55, green: 0.38, blue: 0.23, alpha: 1)
+    static let noseColor = NSColor(red: 0.16, green: 0.10, blue: 0.08, alpha: 1)
+    static let irisColor = NSColor(red: 0.24, green: 0.15, blue: 0.09, alpha: 1)
     static let frameColor = NSColor(red: 0.05, green: 0.05, blue: 0.06, alpha: 1)
+    static let suitColor = NSColor(red: 0.25, green: 0.40, blue: 0.53, alpha: 1)  // 西装蓝
+    static let shirtColor = NSColor(red: 0.42, green: 0.56, blue: 0.66, alpha: 1) // 内衬浅蓝
 
     // 绒毛贴图按色调缓存（生成一次）
     private static let furTexture = makeFurTexture(tint: fur)
@@ -28,127 +30,158 @@ enum TeddyBuilder {
         let root = SCNNode()
         root.name = "Teddy"
 
-        // —— 身体（呼吸节点）——
-        let body = furNode(SCNSphere(radius: 0.60), furTexture)
-        body.scale = SCNVector3(1.06, 0.95, 0.86)
-        body.position = SCNVector3(0, 0.58, 0)
+        // —— 身体：蓝西装（呼吸节点）——
+        let body = node(SCNSphere(radius: 0.60), suitColor)
+        body.scale = SCNVector3(1.05, 0.95, 0.86)
+        body.position = SCNVector3(0, 0.56, 0)
         root.addChildNode(body)
 
-        // —— 腿（坐姿，伸向前方）——
+        // 内衬浅蓝（胸前 V 形区域的简化）
+        let shirt = node(SCNSphere(radius: 0.34), shirtColor)
+        shirt.scale = SCNVector3(0.52, 0.78, 0.42)
+        shirt.position = SCNVector3(0, 0.22, 0.42)
+        body.addChildNode(shirt)
+
+        // 西装扣子
+        for (i, y) in [0.12, -0.10, -0.32].enumerated() {
+            let button = node(SCNSphere(radius: 0.028), frameColor)
+            button.position = SCNVector3(0, CGFloat(y), 0.985 - CGFloat(i) * 0.02)
+            // 贴着身体球面（身体节点局部坐标，半径 1.0 处）
+            button.position = SCNVector3(0, CGFloat(y), sqrt(max(0.001, 1.0 - CGFloat(y * y))) * 0.60 + 0.005)
+            body.addChildNode(button)
+        }
+
+        // —— 腿（坐姿、绒毛，西装不盖腿）——
         for side: CGFloat in [-1, 1] {
             let leg = furNode(SCNCapsule(capRadius: 0.22, height: 0.62), furTexture)
-            leg.position = SCNVector3(side * 0.40, 0.28, 0.38)
+            leg.position = SCNVector3(side * 0.40, 0.27, 0.38)
             leg.eulerAngles = SCNVector3(-1.25, 0, side * -0.28)
             root.addChildNode(leg)
 
             let foot = furNode(SCNSphere(radius: 0.21), furTexture)
             foot.scale = SCNVector3(1.0, 0.95, 1.1)
-            foot.position = SCNVector3(side * 0.50, 0.22, 0.66)
+            foot.position = SCNVector3(side * 0.50, 0.21, 0.66)
             root.addChildNode(foot)
 
-            // 脚掌（朝前上方对着观众）
-            let pad = node(SCNSphere(radius: 0.15), padColor)
+            let pad = node(SCNSphere(radius: 0.145), padColor)
             pad.scale = SCNVector3(1.0, 1.0, 0.28)
-            pad.position = SCNVector3(side * 0.52, 0.26, 0.83)
+            pad.position = SCNVector3(side * 0.52, 0.25, 0.83)
             pad.eulerAngles = SCNVector3(-0.5, 0, 0)
             root.addChildNode(pad)
         }
 
-        // —— 手臂 ——
+        // —— 手臂：西装袖子 + 露出的绒毛手掌 ——
         for side: CGFloat in [-1, 1] {
-            let arm = furNode(SCNCapsule(capRadius: 0.16, height: 0.58), furTexture)
-            arm.position = SCNVector3(side * 0.58, 0.72, 0.10)
-            arm.eulerAngles = SCNVector3(-0.45, 0, side * 0.65)
-            root.addChildNode(arm)
+            let sleeve = node(SCNCapsule(capRadius: 0.16, height: 0.55), suitColor)
+            sleeve.position = SCNVector3(side * 0.57, 0.70, 0.10)
+            sleeve.eulerAngles = SCNVector3(-0.45, 0, side * 0.65)
+            root.addChildNode(sleeve)
 
-            let paw = furNode(SCNSphere(radius: 0.155), furTexture)
-            paw.position = SCNVector3(side * 0.72, 0.46, 0.28)
+            let paw = furNode(SCNSphere(radius: 0.16), furTexture)
+            paw.position = SCNVector3(side * 0.70, 0.42, 0.30)
             root.addChildNode(paw)
         }
 
         // —— 头（跟随鼠标的枢轴在脖子处）——
         let head = SCNNode()
         head.name = "Head"
-        head.position = SCNVector3(0, 1.16, 0)
+        head.position = SCNVector3(0, 1.14, 0)
         root.addChildNode(head)
 
-        // 宽圆头型（原型头部比例大、偏宽）
-        let skull = furNode(SCNSphere(radius: 0.56), furTexture)
-        skull.scale = SCNVector3(1.12, 0.95, 0.92)
-        skull.position = SCNVector3(0, 0.32, 0)
+        // 宽脸大头（比例上比身体还宽）
+        let skull = furNode(SCNSphere(radius: 0.58), furTexture)
+        skull.scale = SCNVector3(1.18, 0.92, 0.95)
+        skull.position = SCNVector3(0, 0.34, 0)
         head.addChildNode(skull)
 
-        // 耳朵（头顶两角，存引用供抖动动画）
+        // 鼓起的脸颊
+        for side: CGFloat in [-1, 1] {
+            let cheek = furNode(SCNSphere(radius: 0.26), furTexture)
+            cheek.scale = SCNVector3(1, 0.85, 0.9)
+            cheek.position = SCNVector3(side * 0.34, 0.10, 0.26)
+            head.addChildNode(cheek)
+        }
+
+        // 眉骨（眼镜上方两道独立隆起的绒毛脊——Ted 表情的灵魂）
+        for side: CGFloat in [-1, 1] {
+            let brow = furNode(SCNSphere(radius: 0.115), furTexture)
+            brow.scale = SCNVector3(1.25, 0.5, 0.55)
+            brow.position = SCNVector3(side * 0.225, 0.615, 0.445)
+            brow.eulerAngles = SCNVector3(0, 0, side * -0.22)
+            head.addChildNode(brow)
+        }
+
+        // 耳朵（小、靠头顶两侧，无内耳色块）
         var ears: [SCNNode] = []
         for side: CGFloat in [-1, 1] {
-            let ear = furNode(SCNSphere(radius: 0.19), furTexture)
+            let ear = furNode(SCNSphere(radius: 0.17), furTexture)
             ear.scale = SCNVector3(1, 1, 0.55)
-            ear.position = SCNVector3(side * 0.42, 0.76, -0.02)
+            ear.position = SCNVector3(side * 0.47, 0.74, -0.05)
             head.addChildNode(ear)
             ears.append(ear)
-
-            let inner = node(SCNSphere(radius: 0.115), furLight)
-            inner.scale = SCNVector3(1, 1, 0.4)
-            inner.position = SCNVector3(side * 0.415, 0.75, 0.07)
-            head.addChildNode(inner)
         }
 
-        // 大口鼻（突出、占下半脸）
-        let muzzle = furNode(SCNSphere(radius: 0.36), furLightTexture)
-        muzzle.scale = SCNVector3(1.15, 0.88, 0.72)
-        muzzle.position = SCNVector3(0, 0.06, 0.46)
+        // 大口鼻（奶油色，占下半张脸，明显凸出）
+        let muzzle = furNode(SCNSphere(radius: 0.40), furLightTexture)
+        muzzle.scale = SCNVector3(1.22, 0.92, 0.80)
+        muzzle.position = SCNVector3(0, -0.02, 0.40)
         head.addChildNode(muzzle)
 
-        // 鼻子（宽扁深色）
-        let nose = node(SCNSphere(radius: 0.115), noseColor)
-        nose.scale = SCNVector3(1.3, 0.75, 0.5)
-        nose.position = SCNVector3(0, 0.22, 0.70)
+        // 大鼻子（口鼻顶部正中）
+        let nose = node(SCNSphere(radius: 0.15), noseColor)
+        nose.scale = SCNVector3(1.2, 0.85, 0.55)
+        nose.position = SCNVector3(0, 0.245, 0.66)
         head.addChildNode(nose)
 
-        // 缝线嘴：鼻下竖线 + 两条下撇线
-        let stitch = node(SCNCylinder(radius: 0.012, height: 0.09), noseColor)
-        stitch.position = SCNVector3(0, 0.135, 0.72)
+        // 缝线嘴：鼻下竖线 + 两侧宽幅下撇线（各两段，连成"︵"宽弧）
+        let stitch = node(SCNCylinder(radius: 0.013, height: 0.13), noseColor)
+        stitch.position = SCNVector3(0, 0.085, 0.715)
         head.addChildNode(stitch)
         for side: CGFloat in [-1, 1] {
-            let lip = node(SCNCylinder(radius: 0.012, height: 0.14), noseColor)
-            lip.position = SCNVector3(side * 0.068, 0.07, 0.71)
-            lip.eulerAngles = SCNVector3(0.15, 0, side * 1.3)
-            head.addChildNode(lip)
+            let lipInner = node(SCNCylinder(radius: 0.013, height: 0.17), noseColor)
+            lipInner.position = SCNVector3(side * 0.085, 0.005, 0.715)
+            lipInner.eulerAngles = SCNVector3(0.22, 0, side * 1.35)
+            head.addChildNode(lipInner)
+
+            let lipOuter = node(SCNCylinder(radius: 0.013, height: 0.13), noseColor)
+            lipOuter.position = SCNVector3(side * 0.215, -0.045, 0.665)
+            lipOuter.eulerAngles = SCNVector3(0.30, 0, side * 1.05)
+            head.addChildNode(lipOuter)
         }
 
-        // 眼睛：琥珀色眼珠 + 黑瞳孔 + 高光，可整体转动（眼神领先于头）
+        // 眼睛：深棕眼珠 + 黑瞳孔 + 高光，紧贴镜片后方
         var eyes: [SCNNode] = []
         for side: CGFloat in [-1, 1] {
-            let eye = node(SCNSphere(radius: 0.082), irisColor)
-            eye.position = SCNVector3(side * 0.17, 0.45, 0.50)
+            let eye = node(SCNSphere(radius: 0.078), irisColor)
+            eye.position = SCNVector3(side * 0.175, 0.43, 0.515)
 
-            let pupil = node(SCNSphere(radius: 0.038), .black)
-            pupil.position = SCNVector3(0, 0, 0.052)
+            let pupil = node(SCNSphere(radius: 0.036), .black)
+            pupil.position = SCNVector3(0, 0, 0.05)
             eye.addChildNode(pupil)
 
-            let highlight = node(SCNSphere(radius: 0.018), .white)
-            highlight.position = SCNVector3(0.022, 0.024, 0.072)
+            let highlight = node(SCNSphere(radius: 0.017), .white)
+            highlight.position = SCNVector3(0.02, 0.022, 0.068)
             eye.addChildNode(highlight)
 
             head.addChildNode(eye)
             eyes.append(eye)
         }
 
-        // —— 方框眼镜（圆角矩形镜框，对齐原型）——
+        // —— 细方框眼镜（架在口鼻上方）——
         let glasses = SCNNode()
-        glasses.position = SCNVector3(0, 0.45, 0.56)
+        glasses.position = SCNVector3(0, 0.43, 0.585)
         for side: CGFloat in [-1, 1] {
             let frame = node(rectFrameShape(), frameColor)
-            frame.position = SCNVector3(side * 0.175, 0, 0)
+            frame.position = SCNVector3(side * 0.185, 0, 0)
             glasses.addChildNode(frame)
 
-            let temple = node(SCNCylinder(radius: 0.010, height: 0.44), frameColor)
-            temple.position = SCNVector3(side * 0.315, 0.035, -0.21)
+            let temple = node(SCNCylinder(radius: 0.009, height: 0.46), frameColor)
+            temple.position = SCNVector3(side * 0.34, 0.04, -0.22)
             temple.eulerAngles = SCNVector3(Double.pi / 2, 0, 0)
             glasses.addChildNode(temple)
         }
-        let bridge = node(SCNCylinder(radius: 0.011, height: 0.09), frameColor)
-        bridge.position = SCNVector3(0, 0.035, 0)
+        let bridge = node(SCNCylinder(radius: 0.010, height: 0.075), frameColor)
+        bridge.position = SCNVector3(0, 0.03, 0)
         bridge.eulerAngles = SCNVector3(0, 0, Double.pi / 2)
         glasses.addChildNode(bridge)
         head.addChildNode(glasses)
@@ -156,20 +189,20 @@ enum TeddyBuilder {
         return TeddyModel(root: root, head: head, body: body, eyes: eyes, ears: ears)
     }
 
-    /// 圆角矩形镜框（带孔的环形截面，挤出成型）
+    /// 细边圆角矩形镜框（带孔的环形截面，挤出成型）
     private static func rectFrameShape() -> SCNGeometry {
         let outer = NSBezierPath(
-            roundedRect: NSRect(x: -0.15, y: -0.105, width: 0.30, height: 0.21),
-            xRadius: 0.06, yRadius: 0.06
+            roundedRect: NSRect(x: -0.155, y: -0.10, width: 0.31, height: 0.20),
+            xRadius: 0.05, yRadius: 0.05
         )
         let inner = NSBezierPath(
-            roundedRect: NSRect(x: -0.132, y: -0.087, width: 0.264, height: 0.174),
-            xRadius: 0.05, yRadius: 0.05
+            roundedRect: NSRect(x: -0.141, y: -0.086, width: 0.282, height: 0.172),
+            xRadius: 0.042, yRadius: 0.042
         )
         outer.append(inner.reversed)
         outer.windingRule = .nonZero
-        outer.flatness = 0.0008 // 细分平滑，避免圆角变成八边形
-        let shape = SCNShape(path: outer, extrusionDepth: 0.028)
+        outer.flatness = 0.0008 // 细分平滑，避免圆角变成多边形
+        let shape = SCNShape(path: outer, extrusionDepth: 0.026)
         return shape
     }
 

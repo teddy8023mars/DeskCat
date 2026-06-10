@@ -113,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let brain = CatBrain(cat: catScene)
         brain.windowFrame = window.frame
         view.scene = catScene.scene
+        view.contentRoot = catScene.yawNode
         view.delegate = brain
         self.brain = brain
     }
