@@ -119,17 +119,17 @@ enum TeddyBuilder {
         // ——— 立体嘴：玩偶的"凹腔嘴"结构 ———
         let mouthSurfZ = headBlob.surfaceZ(x: 0, y: 0.12)
         let mouthInteriorC = SIMD3<Float>(0.18, 0.10, 0.09) // 嘴腔内的暖深色
-        // 下唇凸起（先加形体，再挖腔，腔的下沿就是唇的上缘）
-        headBlob.add(blend: 0.05, color: furLightC, SDF.ellipsoid(
-            center: [0, 0.005, mouthSurfZ - 0.03], radii: [0.165, 0.06, 0.075]
+        // 下唇（前缘略缩进口鼻表面——上唇微微盖住下唇才是正确咬合，避免地包天）
+        headBlob.add(blend: 0.04, color: furLightC, SDF.ellipsoid(
+            center: [0, 0.005, mouthSurfZ - 0.075], radii: [0.15, 0.05, 0.07]
         ))
-        // 挖出微笑形开口：宽扁主腔 + 两个明显上抬的嘴角球
+        // 挖出微笑形开口：往深处挖而不是向前顶
         headBlob.subtract(blend: 0.03, color: mouthInteriorC, SDF.ellipsoid(
-            center: [0, 0.095, mouthSurfZ + 0.05], radii: [0.225, 0.048, 0.10]
+            center: [0, 0.095, mouthSurfZ + 0.035], radii: [0.225, 0.048, 0.10]
         ))
         for side: Float in [-1, 1] {
             headBlob.subtract(blend: 0.028, color: mouthInteriorC, SDF.sphere(
-                center: [side * 0.20, 0.155, mouthSurfZ + 0.015], radius: 0.042
+                center: [side * 0.20, 0.155, mouthSurfZ + 0.005], radius: 0.042
             ))
         }
 
