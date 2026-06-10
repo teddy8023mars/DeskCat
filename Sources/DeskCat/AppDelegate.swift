@@ -104,6 +104,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.window = window
         self.catView = view
         attach(catScene)
+
+        if ProcessInfo.processInfo.environment["DC_DEBUG"] != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak view] in
+                _ = view?.modelInsets()
+            }
+        }
     }
 
     /// 把场景接到视图上并重建大脑（首次启动和切换形象共用）
@@ -113,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let brain = CatBrain(cat: catScene)
         brain.windowFrame = window.frame
         view.scene = catScene.scene
-        view.contentRoot = catScene.yawNode
+        view.invalidateInsets()
         view.delegate = brain
         self.brain = brain
     }
