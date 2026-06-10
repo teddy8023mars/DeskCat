@@ -116,11 +116,28 @@ enum TeddyBuilder {
         // 脖子（藏进身体，转头时不露缝）
         headBlob.add(blend: 0.12, color: furC, SDF.capsule(from: [0, -0.12, 0], to: [0, 0.15, 0], radius: 0.32))
 
+        // ——— 立体嘴：玩偶的"凹腔嘴"结构 ———
+        let mouthSurfZ = headBlob.surfaceZ(x: 0, y: 0.12)
+        let mouthInteriorC = SIMD3<Float>(0.18, 0.10, 0.09) // 嘴腔内的暖深色
+        // 下唇凸起（先加形体，再挖腔，腔的下沿就是唇的上缘）
+        headBlob.add(blend: 0.05, color: furLightC, SDF.ellipsoid(
+            center: [0, 0.005, mouthSurfZ - 0.03], radii: [0.165, 0.06, 0.075]
+        ))
+        // 挖出微笑形开口：宽扁主腔 + 两个明显上抬的嘴角球
+        headBlob.subtract(blend: 0.03, color: mouthInteriorC, SDF.ellipsoid(
+            center: [0, 0.095, mouthSurfZ + 0.05], radii: [0.225, 0.048, 0.10]
+        ))
+        for side: Float in [-1, 1] {
+            headBlob.subtract(blend: 0.028, color: mouthInteriorC, SDF.sphere(
+                center: [side * 0.20, 0.155, mouthSurfZ + 0.015], radius: 0.042
+            ))
+        }
+
         let headGeometry = SDFMesh.geometry(
             blob: headBlob,
             boundsMin: [-1.00, -0.50, -0.80],
             boundsMax: [1.00, 1.15, 0.95],
-            resolution: 80
+            resolution: 96
         )
         head.addChildNode(SCNNode(geometry: headGeometry))
 
@@ -143,23 +160,13 @@ enum TeddyBuilder {
         nose.position = SCNVector3(0, 0.30, CGFloat(noseSurfZ + 0.012))
         head.addChildNode(nose)
 
-        // 缝线嘴：鼻下竖线 + 微微上扬的连续浅弧（友好表情的关键）。
-        // 每个采样点用 surfaceZ 贴在口鼻曲面上，球关节连接保证平滑连续。
-        var smilePoints: [SIMD3<Float>] = []
-        for i in 0...10 {
-            let t = Float(i) / 10 * 2 - 1 // -1...1
-            let x = t * 0.21
-            let y = 0.125 + 0.055 * t * t // 抛物线开口向上 = 微笑
-            smilePoints.append([x, y, headBlob.surfaceZ(x: x, y: y) + 0.008])
-        }
-        head.addChildNode(stitchLine(points: smilePoints, radius: 0.012, color: noseColor))
-
+        // 鼻下竖缝线（人中），连到嘴的上沿
         var creasePoints: [SIMD3<Float>] = []
         for i in 0...4 {
-            let y = 0.245 - Float(i) / 4 * 0.115 // 鼻底到微笑中心
+            let y = 0.245 - Float(i) / 4 * 0.06 // 鼻底到嘴上沿
             creasePoints.append([0, y, headBlob.surfaceZ(x: 0, y: y) + 0.008])
         }
-        head.addChildNode(stitchLine(points: creasePoints, radius: 0.012, color: noseColor))
+        head.addChildNode(stitchLine(points: creasePoints, radius: 0.011, color: noseColor))
 
         // 眼睛：加大 + 琥珀色虹膜 + 双高光——眼睛承载灵动感
         var eyes: [SCNNode] = []

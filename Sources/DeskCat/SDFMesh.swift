@@ -5,19 +5,29 @@ import simd
 /// 再用 Surface Nets 网格化。部件衔接处是柔和的肉感过渡，而非生硬交线——
 /// 这是程序化生成可爱角色的标准做法。颜色按距离场权重在顶点间平滑混合。
 struct SDFBlob {
+    enum Mode {
+        case union    // 平滑并集（加形体）
+        case subtract // 平滑减法（挖凹腔，比如嘴）
+    }
+
     struct Part {
         let sdf: (SIMD3<Float>) -> Float
         let color: SIMD3<Float>
         let blend: Float // smooth-min 的 k：越大过渡越肉
+        let mode: Mode
     }
 
     private(set) var parts: [Part] = []
 
     mutating func add(blend: Float, color: SIMD3<Float>, _ sdf: @escaping (SIMD3<Float>) -> Float) {
-        parts.append(Part(sdf: sdf, color: color, blend: blend))
+        parts.append(Part(sdf: sdf, color: color, blend: blend, mode: .union))
     }
 
-    /// 距离 + 混合色（smooth-min 链式折叠）
+    mutating func subtract(blend: Float, color: SIMD3<Float>, _ sdf: @escaping (SIMD3<Float>) -> Float) {
+        parts.append(Part(sdf: sdf, color: color, blend: blend, mode: .subtract))
+    }
+
+    /// 距离 + 混合色（smooth-min/smooth-max 链式折叠）
     func eval(_ p: SIMD3<Float>) -> (d: Float, c: SIMD3<Float>) {
         var d = Float.greatestFiniteMagnitude
         var c = SIMD3<Float>(1, 1, 1)
@@ -29,9 +39,17 @@ struct SDFBlob {
                 continue
             }
             let k = part.blend
-            let h = max(0, min(1, 0.5 + 0.5 * (pd - d) / k))
-            d = pd * (1 - h) + d * h - k * h * (1 - h)
-            c = part.color * (1 - h) + c * h
+            switch part.mode {
+            case .union:
+                let h = max(0, min(1, 0.5 + 0.5 * (pd - d) / k))
+                d = pd * (1 - h) + d * h - k * h * (1 - h)
+                c = part.color * (1 - h) + c * h
+            case .subtract:
+                // smax(d, -pd, k)：挖去 part 的形体；被挖出的内壁染成 part 的颜色
+                let h = max(0, min(1, 0.5 + 0.5 * (d + pd) / k))
+                d = -pd * (1 - h) + d * h + k * h * (1 - h)
+                c = part.color * (1 - h) + c * h
+            }
         }
         return (d, c)
     }
