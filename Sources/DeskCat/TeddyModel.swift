@@ -133,11 +133,12 @@ enum TeddyBuilder {
             ))
         }
         // 奶油色口鼻：上窄下宽，带 Ted 标志性的厚下巴
+        // （侧看突出量收敛：前缘从头球面外 ~0.18 收到 ~0.08，贴脸不撅嘴）
         headBlob.add(blend: 0.07, color: furLightC, SDF.ellipsoid(
-            center: [0, 0.10, 0.52], radii: [0.38, 0.28, 0.26]
+            center: [0, 0.10, 0.46], radii: [0.38, 0.28, 0.22]
         ))
         headBlob.add(blend: 0.08, color: furLightC, SDF.ellipsoid(
-            center: [0, -0.04, 0.48], radii: [0.30, 0.17, 0.21]
+            center: [0, -0.04, 0.44], radii: [0.30, 0.17, 0.18]
         ))
         // 脖子（藏进身体，转头时不露缝）
         headBlob.add(blend: 0.12, color: furC, SDF.capsule(from: [0, -0.12, 0], to: [0, 0.15, 0], radius: 0.32))

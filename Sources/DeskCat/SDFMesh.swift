@@ -294,9 +294,10 @@ enum SDFMesh {
         for (i, p) in positions.enumerated() {
             var c = blob.eval(p).c
             // 按顶点序号哈希的纤维噪声（基于位置会和网格化顶点的规则分布产生摩尔纹）
+            // 幅度压低：高频纤维纹理已由片元着色器负责，这里只留少许低频起伏
             let h = sin(Float(i) * 12.9898 + 78.233) * 43758.5453
             let grain = (h - h.rounded(.down)) * 2 - 1
-            c *= 1 + 0.03 * grain
+            c *= 1 + 0.012 * grain
             c = simd_clamp(c, SIMD3(0, 0, 0), SIMD3(1, 1, 1))
             // SceneKit 顶点色按线性空间解读，需要 sRGB → 线性转换，否则发白
             colors.append(SIMD3(pow(c.x, 2.2), pow(c.y, 2.2), pow(c.z, 2.2)))
@@ -363,9 +364,30 @@ enum SDFMesh {
         material.isDoubleSided = true // 法线来自距离场梯度，与三角形环绕方向无关
         material.shaderModifiers = [
             .surface: """
+            float dc_hash(float3 p) {
+                return fract(sin(dot(p, float3(12.9898, 78.233, 37.719))) * 43758.5453);
+            }
+            float dc_noise(float3 q) {
+                float3 fi = floor(q);
+                float3 fr = fract(q);
+                fr = fr * fr * (3.0 - 2.0 * fr);
+                float a = mix(dc_hash(fi), dc_hash(fi + float3(1,0,0)), fr.x);
+                float b = mix(dc_hash(fi + float3(0,1,0)), dc_hash(fi + float3(1,1,0)), fr.x);
+                float c = mix(dc_hash(fi + float3(0,0,1)), dc_hash(fi + float3(1,0,1)), fr.x);
+                float d = mix(dc_hash(fi + float3(0,1,1)), dc_hash(fi + float3(1,1,1)), fr.x);
+                return mix(mix(a, b, fr.y), mix(c, d, fr.y), fr.z);
+            }
+            #pragma body
             float rim = pow(1.0 - max(0.0, dot(normalize(_surface.view), _surface.normal)), 2.2);
             // 蓝色占优的顶点色 = 西装/衬衫布料，其余 = 绒毛（顶点色已在线性空间）
             float cloth = clamp((_surface.diffuse.b - _surface.diffuse.r) * 8.0, 0.0, 1.0);
+            // 世界空间坐标（模型在桌面上不平移，纹理稳定），竖向拉长 = 顺毛方向的纤维纹理
+            float3 mp = (scn_frame.inverseViewTransform * float4(_surface.position, 1.0)).xyz;
+            float furTex = 0.65 * dc_noise(mp * float3(42.0, 18.0, 42.0))
+                         + 0.35 * dc_noise(mp * float3(110.0, 48.0, 110.0));
+            furTex = (furTex - 0.5) * 2.0;
+            // 绒毛吃 10% 的纤维明暗，布料只吃 3%（细织物）
+            _surface.diffuse.rgb *= 1.0 + furTex * (0.10 - 0.07 * cloth);
             // 绒毛：边缘逆光的毛茸高光；布料：边缘轻微压暗，呈致密织物感
             _surface.diffuse.rgb += rim * 0.28 * _surface.diffuse.rgb * (1.0 - cloth);
             _surface.diffuse.rgb *= 1.0 - 0.22 * rim * cloth;

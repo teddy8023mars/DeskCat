@@ -83,6 +83,9 @@ final class CatScene {
         cameraNode.camera = camera
         // 长焦镜头（低 FOV 减少透视畸变，玩具感更强）；取景留安全边距
         camera.fieldOfView = 30
+        // 屏幕空间环境光遮蔽：凹处（嘴角/趾缝/领结褶）落下接触阴影，细节才立体
+        camera.screenSpaceAmbientOcclusionIntensity = 1.1
+        camera.screenSpaceAmbientOcclusionRadius = 0.18
         cameraNode.position = SCNVector3(0, 0.55, 5.0)
         cameraNode.look(at: SCNVector3(0, -0.02, 0))
         scene.rootNode.addChildNode(cameraNode)
@@ -91,8 +94,15 @@ final class CatScene {
         let keyLight = SCNNode()
         keyLight.light = SCNLight()
         keyLight.light!.type = .directional
-        keyLight.light!.intensity = 850
+        keyLight.light!.intensity = 900
         keyLight.light!.color = NSColor(red: 1.0, green: 0.96, blue: 0.88, alpha: 1)
+        // 柔和自投影：下巴投在胸口、头投在身体，部件之间有深度分离
+        keyLight.light!.castsShadow = true
+        keyLight.light!.shadowRadius = 7
+        keyLight.light!.shadowSampleCount = 24
+        keyLight.light!.shadowColor = NSColor(white: 0, alpha: 0.38)
+        keyLight.light!.shadowMapSize = CGSize(width: 1024, height: 1024)
+        keyLight.light!.automaticallyAdjustsShadowProjection = true
         keyLight.eulerAngles = SCNVector3(-Double.pi / 5, Double.pi / 7, 0)
         scene.rootNode.addChildNode(keyLight)
 
@@ -112,10 +122,11 @@ final class CatScene {
         rimLight.eulerAngles = SCNVector3(Double.pi / 7, Double.pi - 0.4, 0)
         scene.rootNode.addChildNode(rimLight)
 
+        // 环境光压低：太强会把形体明暗洗平，细节全糊掉
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light!.type = .ambient
-        ambient.light!.intensity = 450
+        ambient.light!.intensity = 300
         scene.rootNode.addChildNode(ambient)
     }
 
