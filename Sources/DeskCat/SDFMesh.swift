@@ -363,8 +363,12 @@ enum SDFMesh {
         material.isDoubleSided = true // 法线来自距离场梯度，与三角形环绕方向无关
         material.shaderModifiers = [
             .surface: """
-            float fuzz = pow(1.0 - max(0.0, dot(normalize(_surface.view), _surface.normal)), 2.2);
-            _surface.diffuse.rgb += fuzz * 0.28 * _surface.diffuse.rgb;
+            float rim = pow(1.0 - max(0.0, dot(normalize(_surface.view), _surface.normal)), 2.2);
+            // 蓝色占优的顶点色 = 西装/衬衫布料，其余 = 绒毛（顶点色已在线性空间）
+            float cloth = clamp((_surface.diffuse.b - _surface.diffuse.r) * 8.0, 0.0, 1.0);
+            // 绒毛：边缘逆光的毛茸高光；布料：边缘轻微压暗，呈致密织物感
+            _surface.diffuse.rgb += rim * 0.28 * _surface.diffuse.rgb * (1.0 - cloth);
+            _surface.diffuse.rgb *= 1.0 - 0.22 * rim * cloth;
             """
         ]
         geometry.materials = [material]

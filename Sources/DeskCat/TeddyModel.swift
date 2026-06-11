@@ -18,9 +18,10 @@ enum TeddyBuilder {
     static let furC = SIMD3<Float>(0.73, 0.54, 0.33)       // 蜂蜜棕绒毛
     static let furLightC = SIMD3<Float>(0.89, 0.77, 0.60)  // 奶油色口鼻
     static let browC = SIMD3<Float>(0.55, 0.37, 0.20)      // 眉毛（比毛色深，表情才能"读"出来）
-    static let padC = SIMD3<Float>(0.55, 0.38, 0.23)
+    static let padC = SIMD3<Float>(0.45, 0.30, 0.18) // 脚趾豆（够深才能和毛色拉开）
     static let suitC = SIMD3<Float>(0.25, 0.40, 0.53)      // 西装蓝
     static let shirtC = SIMD3<Float>(0.42, 0.56, 0.66)     // 内衬浅蓝
+    static let pawSeamC = SIMD3<Float>(0.60, 0.43, 0.26)   // 手掌缝线凹槽阴影色
 
     static let fur = NSColor(red: 0.73, green: 0.54, blue: 0.33, alpha: 1)
     static let noseColor = NSColor(red: 0.16, green: 0.10, blue: 0.08, alpha: 1)
@@ -60,10 +61,18 @@ enum TeddyBuilder {
             ))
             // 露出的绒毛手掌（小 blend 让袖口像缝制的边）
             bodyBlob.add(blend: 0.022, color: furC, SDF.sphere(center: [side * 0.66, 0.38, 0.26], radius: 0.135))
+            // 手掌缝线：两道凹槽分出"连指手套"式的三根胖手指
+            for dx: Float in [-0.048, 0.048] {
+                bodyBlob.subtract(blend: 0.012, color: pawSeamC, SDF.capsule(
+                    from: [side * 0.66 + dx, 0.50, 0.28],
+                    to: [side * 0.66 + dx, 0.38, 0.39],
+                    radius: 0.028
+                ))
+            }
         }
-        // 短腿（绒毛，西装不盖腿）
+        // 短腿（绒毛，西装不盖腿；blend 调小避免绒毛色晕染到西装下摆）
         for side: Float in [-1, 1] {
-            bodyBlob.add(blend: 0.07, color: furC, SDF.capsule(
+            bodyBlob.add(blend: 0.05, color: furC, SDF.capsule(
                 from: [side * 0.30, 0.36, 0.08],
                 to: [side * 0.42, 0.24, 0.42],
                 radius: 0.19
@@ -71,17 +80,23 @@ enum TeddyBuilder {
             bodyBlob.add(blend: 0.05, color: furC, SDF.ellipsoid(
                 center: [side * 0.45, 0.20, 0.52], radii: [0.19, 0.18, 0.22]
             ))
-            // 深色脚掌（颜色区域，几乎不改变形状）
-            bodyBlob.add(blend: 0.025, color: padC, SDF.ellipsoid(
-                center: [side * 0.47, 0.24, 0.72], radii: [0.115, 0.115, 0.04]
+            // 经典玩具熊脚底：大块奶油色掌垫 + 三颗深色脚趾豆
+            bodyBlob.add(blend: 0.018, color: furLightC, SDF.ellipsoid(
+                center: [side * 0.46, 0.18, 0.70], radii: [0.125, 0.115, 0.055]
             ))
+            bodyBlob.add(blend: 0.014, color: padC, SDF.sphere(center: [side * 0.46, 0.335, 0.675], radius: 0.034))
+            for toe: Float in [-1, 1] {
+                bodyBlob.add(blend: 0.014, color: padC, SDF.sphere(
+                    center: [side * 0.46 + toe * 0.085, 0.305, 0.675], radius: 0.034
+                ))
+            }
         }
 
         let bodyGeometry = SDFMesh.geometry(
             blob: bodyBlob,
             boundsMin: [-0.95, -0.10, -0.70],
             boundsMax: [0.95, 1.20, 0.95],
-            resolution: 72
+            resolution: 104 // 手掌缝线和脚趾豆是细结构，需要更密的采样
         )
         let body = SCNNode(geometry: bodyGeometry)
         body.name = "Body"
@@ -94,6 +109,24 @@ enum TeddyBuilder {
             button.position = SCNVector3(0, CGFloat(y), CGFloat(z + 0.008))
             root.addChildNode(button)
         }
+
+        // 红色蝴蝶结领结：两个压扁的锥形翼 + 圆角中心结，贴在下巴下方的胸口曲面上
+        let bowColor = NSColor(red: 0.80, green: 0.13, blue: 0.16, alpha: 1)
+        let bowtie = SCNNode()
+        bowtie.name = "Bowtie"
+        let bowZ = bodyBlob.surfaceZ(x: 0, y: 0.76)
+        bowtie.position = SCNVector3(0, 0.76, CGFloat(bowZ) + 0.03)
+        bowtie.eulerAngles = SCNVector3(-0.30, 0, 0) // 顺着胸口上斜的表面贴合
+        for side: CGFloat in [-1, 1] {
+            let wing = node(SCNCone(topRadius: 0.012, bottomRadius: 0.085, height: 0.17), bowColor)
+            wing.scale = SCNVector3(1, 1, 0.5) // 压扁成缎带的厚度
+            wing.position = SCNVector3(side * 0.115, 0, 0)
+            wing.eulerAngles = SCNVector3(0, 0, side * .pi / 2) // 锥底（宽端）朝外
+            bowtie.addChildNode(wing)
+        }
+        let knot = node(SCNBox(width: 0.075, height: 0.085, length: 0.05, chamferRadius: 0.022), bowColor)
+        bowtie.addChildNode(knot)
+        root.addChildNode(bowtie)
 
         // ============ 头：巨大的宽圆头（比身体还宽，Ted 的标志比例） ============
         let head = SCNNode()
