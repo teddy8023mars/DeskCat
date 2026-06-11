@@ -19,7 +19,6 @@ enum TeddyBuilder {
     static let furLightC = SIMD3<Float>(0.89, 0.77, 0.60)  // 奶油色口鼻
     static let browC = SIMD3<Float>(0.55, 0.37, 0.20)      // 眉毛（比毛色深，表情才能"读"出来）
     static let suitC = SIMD3<Float>(0.25, 0.40, 0.53)      // 西装蓝
-    static let shirtC = SIMD3<Float>(0.42, 0.56, 0.66)     // 内衬浅蓝
     static let bowC = SIMD3<Float>(0.66, 0.18, 0.18)       // 领结砖红（压灰度融入暖色调）
 
     static let fur = NSColor(red: 0.73, green: 0.54, blue: 0.33, alpha: 1)
@@ -45,12 +44,6 @@ enum TeddyBuilder {
         }
         // 躯干（西装蓝）
         bodyBlob.add(blend: 0.1, color: suitC, SDF.ellipsoid(center: [0, 0.52, 0], radii: [0.56, 0.50, 0.46]))
-        // 内衬浅蓝：贴着躯干真实表面、几乎全部藏进躯干，只在胸前露出平贴的色块
-        // （之前外凸 0.08，侧看像悬浮的鼓包）
-        let chestZ = bodyBlob.surfaceZ(x: 0, y: 0.74)
-        bodyBlob.add(blend: 0.03, color: shirtC, SDF.ellipsoid(
-            center: [0, 0.76, chestZ - 0.105], radii: [0.17, 0.22, 0.12]
-        ))
         // 西装袖子（融进躯干，像缝上去的）
         for side: Float in [-1, 1] {
             bodyBlob.add(blend: 0.06, color: suitC, SDF.capsule(
