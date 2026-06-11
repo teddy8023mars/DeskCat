@@ -18,8 +18,10 @@ enum TeddyBuilder {
     static let furC = SIMD3<Float>(0.73, 0.54, 0.33)       // 蜂蜜棕绒毛
     static let furLightC = SIMD3<Float>(0.89, 0.77, 0.60)  // 奶油色口鼻
     static let browC = SIMD3<Float>(0.55, 0.37, 0.20)      // 眉毛（比毛色深，表情才能"读"出来）
-    static let suitC = SIMD3<Float>(0.25, 0.40, 0.53)      // 西装蓝
-    static let bowC = SIMD3<Float>(0.66, 0.18, 0.18)       // 领结砖红（压灰度融入暖色调）
+    static let suitC = SIMD3<Float>(0.44, 0.47, 0.52)      // 蓝灰西装（Ted 剧照的板岩灰）
+    static let suitSeamC = SIMD3<Float>(0.30, 0.33, 0.38)  // 前襟缝线阴影
+    static let shirtC = SIMD3<Float>(0.93, 0.94, 0.96)     // 白衬衫
+    static let tieC = SIMD3<Float>(0.20, 0.36, 0.62)       // 领带蓝
 
     static let fur = NSColor(red: 0.73, green: 0.54, blue: 0.33, alpha: 1)
     static let noseColor = NSColor(red: 0.16, green: 0.10, blue: 0.08, alpha: 1)
@@ -81,16 +83,54 @@ enum TeddyBuilder {
             }
         }
 
-        // 红色平绒蝴蝶结：和身体同一套 SDF 软融合"缝"在胸口——
-        // 圆鼓的缎面翼呼应全身的软圆形状语言，绒毛着色器自动给它平绒质感
-        for side: Float in [-1, 1] {
-            bodyBlob.add(blend: 0.025, color: bowC, SDF.ellipsoid(
-                center: [side * 0.11, 0.745, 0.41], radii: [0.11, 0.072, 0.055]
-            ))
+        // ——— 西装细节（参考 Ted 剧照）：V 字翻领、白衬衫、蓝领带、前襟闭合缝 ———
+        // 贴胸口曲面取点（长结构沿曲面分段，避免直线段中段埋进表面）
+        func onChest(_ x: Float, _ y: Float, _ inset: Float) -> SIMD3<Float> {
+            [x, y, bodyBlob.surfaceZ(x: x, y: y) - inset]
         }
-        bodyBlob.add(blend: 0.02, color: bowC, SDF.ellipsoid(
-            center: [0, 0.745, 0.44], radii: [0.05, 0.055, 0.045]
+        // 白衬衫：藏进胸口的 V 形浅色区，露在两条翻领之间
+        bodyBlob.add(blend: 0.02, color: shirtC, SDF.ellipsoid(
+            center: onChest(0, 0.78, 0.06), radii: [0.155, 0.16, 0.09]
         ))
+        bodyBlob.add(blend: 0.02, color: shirtC, SDF.ellipsoid(
+            center: onChest(0, 0.62, 0.065), radii: [0.09, 0.11, 0.08]
+        ))
+        // 蓝领带：领结小球 + 贴曲面的三段窄条（一直垂到 V 字底）
+        bodyBlob.add(blend: 0.015, color: tieC, SDF.sphere(center: onChest(0, 0.875, 0.015), radius: 0.05))
+        let tiePts = [
+            onChest(0, 0.85, 0.008), onChest(0, 0.76, 0.008),
+            onChest(0, 0.66, 0.008), onChest(0, 0.56, 0.008),
+        ]
+        for i in 0..<(tiePts.count - 1) {
+            bodyBlob.add(blend: 0.015, color: tieC, SDF.capsule(from: tiePts[i], to: tiePts[i + 1], radius: 0.040))
+        }
+        // 西装翻领：从肩颈斜向胸口中线的两条隆起，框出 V 字（开口要宽过下巴的遮挡）
+        for side: Float in [-1, 1] {
+            let lapelPts = [
+                onChest(side * 0.20, 0.875, 0.012),
+                onChest(side * 0.125, 0.70, 0.012),
+                onChest(side * 0.045, 0.555, 0.012),
+            ]
+            for i in 0..<(lapelPts.count - 1) {
+                bodyBlob.add(blend: 0.022, color: suitC, SDF.capsule(from: lapelPts[i], to: lapelPts[i + 1], radius: 0.048))
+            }
+            // 翻领内缘折线：细凹缝让 V 字轮廓锐利可读
+            let lapelEdgePts = [
+                onChest(side * 0.145, 0.86, -0.012),
+                onChest(side * 0.082, 0.70, -0.012),
+                onChest(side * 0.018, 0.56, -0.012),
+            ]
+            for i in 0..<(lapelEdgePts.count - 1) {
+                bodyBlob.subtract(blend: 0.008, color: suitSeamC, SDF.capsule(
+                    from: lapelEdgePts[i], to: lapelEdgePts[i + 1], radius: 0.012
+                ))
+            }
+        }
+        // 前襟闭合缝：V 字底到下摆的细凹槽（负 inset = 浮在表面外往里挖）
+        let frontSeamPts = [onChest(0, 0.545, -0.014), onChest(0, 0.40, -0.014), onChest(0, 0.26, -0.014)]
+        for i in 0..<(frontSeamPts.count - 1) {
+            bodyBlob.subtract(blend: 0.01, color: suitSeamC, SDF.capsule(from: frontSeamPts[i], to: frontSeamPts[i + 1], radius: 0.018))
+        }
 
         let bodyGeometry = SDFMesh.geometry(
             blob: bodyBlob,
@@ -102,8 +142,8 @@ enum TeddyBuilder {
         body.name = "Body"
         root.addChildNode(body)
 
-        // 西装扣子（贴着融合后的真实表面）
-        for y: Float in [0.56, 0.42, 0.28] {
+        // 西装扣子：前襟缝上的两颗（参考剧照在腰部）
+        for y: Float in [0.46, 0.36] {
             let z = bodyBlob.surfaceZ(x: 0, y: y)
             let button = node(SCNSphere(radius: 0.026), frameColor)
             button.position = SCNVector3(0, CGFloat(y), CGFloat(z + 0.008))

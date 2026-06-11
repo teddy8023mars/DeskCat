@@ -379,8 +379,8 @@ enum SDFMesh {
             }
             #pragma body
             float rim = pow(1.0 - max(0.0, dot(normalize(_surface.view), _surface.normal)), 2.2);
-            // 蓝色占优的顶点色 = 西装/衬衫布料，其余 = 绒毛（顶点色已在线性空间）
-            float cloth = clamp((_surface.diffuse.b - _surface.diffuse.r) * 8.0, 0.0, 1.0);
+            // 冷色（蓝 > 红）顶点色 = 西装/衬衫/领带布料，暖色 = 绒毛（顶点色已在线性空间）
+            float cloth = clamp((_surface.diffuse.b - _surface.diffuse.r) * 20.0, 0.0, 1.0);
             // 世界空间坐标（模型在桌面上不平移，纹理稳定），竖向拉长 = 顺毛方向的纤维纹理
             float3 mp = (scn_frame.inverseViewTransform * float4(_surface.position, 1.0)).xyz;
             float furTex = 0.65 * dc_noise(mp * float3(42.0, 18.0, 42.0))
