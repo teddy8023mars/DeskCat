@@ -11,6 +11,10 @@ struct TeddyModel {
     let body: SCNNode
     let eyes: [SCNNode]
     let ears: [SCNNode]
+    /// 动态嘴：闭合时缩进吻部内不可见，张开时露出暗色口腔（缩放驱动）
+    let mouth: SCNNode
+    /// 微笑角：嘴缝两端上挑的缝线，缩放 0~1 = 无表情~大笑
+    let smileCorners: [SCNNode]
 }
 
 enum TeddyBuilder {
@@ -42,7 +46,7 @@ enum TeddyBuilder {
             root.addChildNode(n)
             let head = SCNNode(); head.name = "Head"; head.position = SCNVector3(0, 1.1, 0)
             root.addChildNode(head)
-            return TeddyModel(root: root, head: head, body: n, eyes: [], ears: [])
+            return TeddyModel(root: root, head: head, body: n, eyes: [], ears: [], mouth: SCNNode(), smileCorners: [])
         }
         // 躯干（西装蓝）
         bodyBlob.add(blend: 0.1, color: suitC, SDF.ellipsoid(center: [0, 0.52, 0], radii: [0.56, 0.50, 0.46]))
@@ -225,6 +229,51 @@ enum TeddyBuilder {
         )
         FurShell.addMerged(to: headGeometryNode, data: headShell, length: 0.046)
 
+        // ——— 动态嘴：静态缝线负责"闭合的毛绒嘴"，这里的口腔节点负责表情。
+        // 暗色椭球中心沉在吻面内侧 0.02，闭合时整体缩小到藏进头里；
+        // 张开时放大、球冠露出表面成为张嘴的暗色开口（参考 Ted 说话剧照） ———
+        let mouthY: Float = -0.005
+        let mouthSurf = headBlob.surfaceZ(x: 0, y: mouthY)
+        let mouth = SCNNode()
+        mouth.position = SCNVector3(0, CGFloat(mouthY) - 0.012, CGFloat(mouthSurf) - 0.014)
+        let cavity = node(SCNSphere(radius: 0.10), NSColor(red: 0.24, green: 0.13, blue: 0.10, alpha: 1))
+        cavity.scale = SCNVector3(0.95, 0.72, 0.72) // z 深度要盖过下沉量+绒毛长度才露得出来
+        mouth.addChildNode(cavity)
+        // 舌头：大开口时可见的一点暖色
+        let tongue = node(SCNSphere(radius: 0.05), NSColor(red: 0.82, green: 0.44, blue: 0.42, alpha: 1))
+        tongue.scale = SCNVector3(1.1, 0.5, 0.6)
+        tongue.position = SCNVector3(0, -0.045, 0.030)
+        mouth.addChildNode(tongue)
+        mouth.scale = SCNVector3(0.12, 0.12, 0.12) // 默认闭合（藏进吻部内）
+        head.addChildNode(mouth)
+
+        // 微笑角：嘴缝两端向上挑的小缝线（缩放 0→1 从无到大笑，枢轴在缝端）
+        let smileC = NSColor(red: 0.35, green: 0.24, blue: 0.16, alpha: 1)
+        var smileCorners: [SCNNode] = []
+        for side: Float in [-1, 1] {
+            // 浮起 0.034：要在绒毛壳层(0.046)的发梢层之上才能读出来
+            let fromPt = SIMD3<Float>(side * 0.145, -0.002, 0)
+            let toPt = SIMD3<Float>(side * 0.205, 0.05, 0)
+            let corner = SCNNode()
+            corner.simdPosition = SIMD3(fromPt.x, fromPt.y, headBlob.surfaceZ(x: fromPt.x, y: fromPt.y) + 0.034)
+            let toLocal = SIMD3<Float>(
+                toPt.x - fromPt.x, toPt.y - fromPt.y,
+                headBlob.surfaceZ(x: toPt.x, y: toPt.y) + 0.034 - corner.simdPosition.z
+            )
+            corner.addChildNode(stitchLine(points: [[0, 0, 0], toLocal], radius: 0.02, color: smileC))
+            corner.scale = SCNVector3(0.45, 0.45, 0.45) // 默认带一点笑意
+            head.addChildNode(corner)
+            smileCorners.append(corner)
+        }
+        // 调试：DC_MOUTH=0..1 / DC_SMILE=0..1 摆出表情供离屏快照
+        if let v = ProcessInfo.processInfo.environment["DC_MOUTH"].flatMap(Float.init) {
+            let s = CGFloat(0.12 + 0.88 * max(0, min(1, v)))
+            mouth.scale = SCNVector3(s, s, s)
+        }
+        if let v = ProcessInfo.processInfo.environment["DC_SMILE"].flatMap(Float.init) {
+            for c in smileCorners { c.scale = SCNVector3(CGFloat(v), CGFloat(v), CGFloat(v)) }
+        }
+
         // 耳朵：头顶 11 点/1 点钟方向的圆耳（Ted 实测耳心距≈头宽 63%、
         // 耳径≈头宽 27%；贴两侧的 10 点/2 点钟位置读作老鼠耳）
         var ears: [SCNNode] = []
@@ -297,7 +346,7 @@ enum TeddyBuilder {
         glasses.addChildNode(bridge)
         head.addChildNode(glasses)
 
-        return TeddyModel(root: root, head: head, body: body, eyes: eyes, ears: ears)
+        return TeddyModel(root: root, head: head, body: body, eyes: eyes, ears: ears, mouth: mouth, smileCorners: smileCorners)
     }
 
     /// 细边圆角矩形镜框

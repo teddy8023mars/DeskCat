@@ -22,6 +22,8 @@ final class CatScene {
     private(set) var bodyBone: SCNNode?
     private(set) var eyeNodes: [SCNNode] = []
     private(set) var earNodes: [SCNNode] = []
+    private(set) var mouthNode: SCNNode?
+    private(set) var smileCornerNodes: [SCNNode] = []
 
     private(set) var headRest = simd_quatf(angle: 0, axis: [0, 1, 0])
     private(set) var tailRest = simd_quatf(angle: 0, axis: [0, 1, 0])
@@ -49,6 +51,8 @@ final class CatScene {
         bodyBone = teddy.body
         eyeNodes = teddy.eyes
         earNodes = teddy.ears
+        mouthNode = teddy.mouth
+        smileCornerNodes = teddy.smileCorners
         finishSetup()
     }
 

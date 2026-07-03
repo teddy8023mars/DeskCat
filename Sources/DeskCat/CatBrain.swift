@@ -50,6 +50,15 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
     private var saccadeYaw: Float = 0
     private var saccadePitch: Float = 0
 
+    // 表情：嘴部开合 + 微笑角（仅泰迪熊）
+    private var mouthOpen: Float = 0
+    private var mouthOpenTarget: Float = 0
+    private var smile: Float = 0.45
+    private var smileTarget: Float = 0.45
+    private var nextExprAt: TimeInterval = 0
+    private var exprEndAt: TimeInterval = 0
+    private var yawning = false
+
     /// 头部跟随的虚拟距离（屏幕点），越小转头越敏感
     private let virtualDistance: Float = 480
 
@@ -189,6 +198,47 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
             }
         }
 
+        // —— 表情：嘴不是死的——兴奋咧嘴、点击大笑、空闲时偶尔哈欠/嘟哝 ——
+        if let mouth = cat.mouthNode {
+            if excited {
+                smileTarget = 1.0
+                mouthOpenTarget = max(mouthOpenTarget, 0.4)
+                exprEndAt = max(exprEndAt, time + 0.5)
+            }
+            if cat.hopNode.hasActions { // 点击互动 → 开心大笑
+                smileTarget = 1.0
+                mouthOpenTarget = max(mouthOpenTarget, 0.85)
+                exprEndAt = max(exprEndAt, time + 0.7)
+            }
+            if time > exprEndAt {
+                smileTarget = 0.45 // 默认留一点笑意
+                mouthOpenTarget = 0
+                yawning = false
+                if nextExprAt == 0 { nextExprAt = time + .random(in: 7...16) }
+                if time > nextExprAt {
+                    nextExprAt = 0
+                    switch Int.random(in: 0..<3) {
+                    case 0: // 咧嘴笑一阵
+                        smileTarget = 1.0; mouthOpenTarget = 0.5
+                        exprEndAt = time + .random(in: 1.2...2.2)
+                    case 1: // 打哈欠：嘴拉高张大
+                        yawning = true; smileTarget = 0.1; mouthOpenTarget = 1.0
+                        exprEndAt = time + 2.4
+                    default: // 小声嘟哝一下
+                        mouthOpenTarget = 0.3
+                        exprEndAt = time + 0.7
+                    }
+                }
+            }
+            mouthOpen += (mouthOpenTarget - mouthOpen) * (1 - exp(-9 * dt))
+            smile += (smileTarget - smile) * (1 - exp(-7 * dt))
+            let s = CGFloat(0.12 + 0.88 * mouthOpen)
+            mouth.scale = SCNVector3(s, yawning ? s * 1.35 : s, s)
+            for c in cat.smileCornerNodes {
+                c.scale = SCNVector3(CGFloat(smile), CGFloat(smile), CGFloat(smile))
+            }
+        }
+
         // 呼吸起伏
         if let body = cat.bodyBone {
             let breath = 1 + 0.02 * sin(t * 2.0)
@@ -201,6 +251,7 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
             || abs(yawAngle - targetYaw) > 0.01 || abs(pitchAngle - targetPitch) > 0.01
         let busy = excited || time < idleEndAt || earTwitchStart >= 0
             || time < blinkUntil || cat.hopNode.hasActions
+            || time < exprEndAt || mouthOpen > 0.03
         let target = (headMoving || busy) ? Self.activeFPS : Self.idleFPS
         if let view = renderer as? SCNView, view.preferredFramesPerSecond != target {
             view.preferredFramesPerSecond = target
