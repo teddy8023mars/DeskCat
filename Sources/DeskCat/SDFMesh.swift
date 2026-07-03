@@ -74,6 +74,25 @@ struct SDFBlob {
         eval(p).d
     }
 
+    /// 从 startX 沿 -x 方向找表面 x 坐标（用于把眼镜腿贴在头侧曲面上；
+    /// 模型左右对称，负侧取对称值即可）
+    func surfaceX(y: Float, z: Float, from startX: Float = 1.5) -> Float {
+        var x = startX
+        while x > -1.5 {
+            let next = x - 0.02
+            if distance(SIMD3(next, y, z)) < 0 {
+                var lo = next, hi = x
+                for _ in 0..<8 {
+                    let mid = (lo + hi) / 2
+                    if distance(SIMD3(mid, y, z)) < 0 { lo = mid } else { hi = mid }
+                }
+                return (lo + hi) / 2
+            }
+            x = next
+        }
+        return 0
+    }
+
     /// 从 startZ 沿 -z 方向找表面 z 坐标（用于把眼睛/鼻子等配件贴在融合后的曲面上）
     func surfaceZ(x: Float, y: Float, from startZ: Float = 1.5) -> Float {
         var z = startZ

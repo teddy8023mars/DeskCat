@@ -286,10 +286,17 @@ enum TeddyBuilder {
             frame.position = SCNVector3(side * 0.215, 0, 0)
             glasses.addChildNode(frame)
 
-            let temple = node(SCNCylinder(radius: 0.009, height: 0.52), frameColor)
-            temple.position = SCNVector3(side * 0.40, 0.04, -0.25)
-            temple.eulerAngles = SCNVector3(Double.pi / 2, 0, 0)
-            glasses.addChildNode(temple)
+            // 镜腿：从镜框外缘斜向后贴着太阳穴曲面分段铺设，末端沉进绒毛。
+            // 直圆柱悬在半空，侧面看就是几截漂浮的黑线（正脸被镜框挡住才没暴露）
+            let s = Float(side)
+            let templeY: Float = 0.50 // 头部空间（镜框竖直中心偏上一点）
+            // 横向偏移要浮在绒毛壳层(0.046)之上，埋进毛里会被发丝裁成虚线
+            var templePts: [SIMD3<Float>] = [[s * 0.37, templeY, Float(glassesZ)]]
+            for z: Float in [0.30, 0.10] {
+                templePts.append([s * (headBlob.surfaceX(y: templeY, z: z) + 0.042), templeY, z])
+            }
+            templePts.append([s * (headBlob.surfaceX(y: templeY, z: -0.08) - 0.015), templeY, -0.08])
+            head.addChildNode(stitchLine(points: templePts, radius: 0.011, color: frameColor))
         }
         let bridge = node(SCNCylinder(radius: 0.010, height: 0.08), frameColor)
         bridge.position = SCNVector3(0, 0.03, 0)
