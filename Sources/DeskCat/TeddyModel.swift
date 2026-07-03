@@ -186,37 +186,27 @@ enum TeddyBuilder {
         // 脖子（藏进身体，转头时不露缝）
         headBlob.add(blend: 0.12, color: furC, SDF.capsule(from: [0, -0.12, 0], to: [0, 0.15, 0], radius: 0.32))
 
-        // ——— 嘴：闭合的立体缝（参考 Ted 剧照——凹槽缝 + 周围的肉感结构） ———
-        let mouthSurfZ = headBlob.surfaceZ(x: 0, y: 0.12)
-        // 颊肉：嘴线上方两侧的鼓起（立体感来自嘴周围的结构）
-        for side: Float in [-1, 1] {
-            headBlob.add(blend: 0.06, color: furLightC, SDF.ellipsoid(
-                center: [side * 0.11, 0.175, mouthSurfZ - 0.055], radii: [0.105, 0.085, 0.07]
-            ))
-        }
-        // 下巴鼓起（嘴线下方）
-        headBlob.add(blend: 0.07, color: furLightC, SDF.ellipsoid(
-            center: [0, -0.01, mouthSurfZ - 0.085], radii: [0.13, 0.08, 0.07]
-        ))
-        // 嘴缝：沿微笑曲线挖一道浅凹槽（阴影自然落进去，任何角度都立体）
+        // ——— 嘴：低位小缝（按 ted_45 特写实测——嘴宽≈吻宽 37%、位于吻部下
+        // 70% 处、近乎水平；吻面本身是干净的面包块，只有人中+嘴缝两道细褶。
+        // 之前雕了颊肉/下巴鼓包读作"有嘴唇"，毛绒玩具没有嘴唇，表情交给眼眉） ———
         let seamC = SIMD3<Float>(0.46, 0.33, 0.22) // 凹槽内的暖阴影色
         var seamPts: [SIMD3<Float>] = []
         for i in 0...10 {
             let t = Float(i) / 10 * 2 - 1
-            let x = t * 0.215
-            let y = 0.105 + 0.05 * t * t
+            let x = t * 0.15
+            let y = -0.005 + 0.015 * t * t
             seamPts.append([x, y, headBlob.surfaceZ(x: x, y: y) + 0.016])
         }
         for i in 0..<(seamPts.count - 1) {
-            headBlob.subtract(blend: 0.018, color: seamC, SDF.capsule(
-                from: seamPts[i], to: seamPts[i + 1], radius: 0.026
+            headBlob.subtract(blend: 0.015, color: seamC, SDF.capsule(
+                from: seamPts[i], to: seamPts[i + 1], radius: 0.02
             ))
         }
-        // 人中：鼻底到嘴缝的竖凹槽
+        // 人中：鼻底到嘴缝的长竖褶（Ted 的鼻和嘴离得远，人中是吻部最醒目的一道线）
         let philtrumTop = SIMD3<Float>(0, 0.245, headBlob.surfaceZ(x: 0, y: 0.245) + 0.014)
-        let philtrumBottom = SIMD3<Float>(0, 0.13, headBlob.surfaceZ(x: 0, y: 0.13) + 0.014)
-        headBlob.subtract(blend: 0.016, color: seamC, SDF.capsule(
-            from: philtrumTop, to: philtrumBottom, radius: 0.02
+        let philtrumBottom = SIMD3<Float>(0, 0.005, headBlob.surfaceZ(x: 0, y: 0.005) + 0.014)
+        headBlob.subtract(blend: 0.014, color: seamC, SDF.capsule(
+            from: philtrumTop, to: philtrumBottom, radius: 0.018
         ))
 
         let headBoundsMin = SIMD3<Float>(-1.00, -0.50, -0.80)
