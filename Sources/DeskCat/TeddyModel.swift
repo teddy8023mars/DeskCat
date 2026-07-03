@@ -165,17 +165,17 @@ enum TeddyBuilder {
         root.addChildNode(head)
 
         var headBlob = SDFBlob()
-        // 比例按 Ted 灰模动画 pass 实测（fxguide VFX 解析图）：
-        // 头宽≈高（1.05:1，之前 1.29:1 宽出 25% 读作仓鼠）；吻部占脸宽 60%、
-        // 下半脸 55%；侧面吻部突出约头深 25%
-        headBlob.add(blend: 0.1, color: furC, SDF.ellipsoid(center: [0, 0.36, 0], radii: [0.68, 0.62, 0.56]))
+        // 比例按 62 张剧照多源交叉实测（长焦官方立绘为准，特写有透视畸变）：
+        // 头宽:高 ≈ 1.26（1.23~1.35 共识；单张远景灰模曾误读为 1.05）；
+        // 吻部≈头宽 50%；耳心距≈头宽 63%；眼距≈头宽 30%；吻部突出≈头深 25%
+        headBlob.add(blend: 0.1, color: furC, SDF.ellipsoid(center: [0, 0.36, 0], radii: [0.78, 0.62, 0.56]))
         // 眉毛（深色、舒展的缓拱——友好中性，不上挑不耷拉）
         for side: Float in [-1, 1] {
             headBlob.add(blend: 0.035, color: browC, SDF.ellipsoid(
-                center: [side * 0.23, 0.67, 0.50], radii: [0.155, 0.048, 0.055]
+                center: [side * 0.25, 0.67, 0.50], radii: [0.160, 0.048, 0.055]
             ))
         }
-        // 奶油色口鼻：统治下半张脸的大椭圆（宽 0.80 = 头宽 59%），不是小鼓包；
+        // 奶油色口鼻：统治下半张脸的大椭圆（宽 0.80 = 头宽 51%），不是小鼓包；
         // 侧面是一个明确前伸的"面包块"，带 Ted 标志性的厚下巴
         headBlob.add(blend: 0.07, color: furLightC, SDF.ellipsoid(
             center: [0, 0.10, 0.48], radii: [0.40, 0.31, 0.26]
@@ -235,13 +235,13 @@ enum TeddyBuilder {
         )
         FurShell.addMerged(to: headGeometryNode, data: headShell, length: 0.046)
 
-        // 耳朵：头顶 11 点/1 点钟方向的圆耳（Ted 实测耳心距≈头宽 33%，
-        // 贴两侧的 10 点/2 点钟位置读作老鼠耳）
+        // 耳朵：头顶 11 点/1 点钟方向的圆耳（Ted 实测耳心距≈头宽 63%、
+        // 耳径≈头宽 27%；贴两侧的 10 点/2 点钟位置读作老鼠耳）
         var ears: [SCNNode] = []
         for side: CGFloat in [-1, 1] {
             let ear = node(SCNSphere(radius: 0.22), fur)
             ear.scale = SCNVector3(1, 1, 0.55)
-            ear.position = SCNVector3(side * 0.45, 0.90, -0.08)
+            ear.position = SCNVector3(side * 0.50, 0.90, -0.08)
             addFuzz(ear)
             FurShell.add(to: ear, length: 0.035, density: 44, color: fur)
             head.addChildNode(ear)
@@ -259,10 +259,10 @@ enum TeddyBuilder {
 
         // 眼睛：加大 + 琥珀色虹膜 + 双高光——眼睛承载灵动感
         var eyes: [SCNNode] = []
-        let eyeSurfZ = headBlob.surfaceZ(x: 0.20, y: 0.47)
+        let eyeSurfZ = headBlob.surfaceZ(x: 0.22, y: 0.47)
         for side: CGFloat in [-1, 1] {
             let eye = node(SCNSphere(radius: 0.078), NSColor(red: 0.40, green: 0.25, blue: 0.12, alpha: 1))
-            eye.position = SCNVector3(side * 0.20, 0.47, CGFloat(eyeSurfZ - 0.012))
+            eye.position = SCNVector3(side * 0.22, 0.47, CGFloat(eyeSurfZ - 0.012))
 
             let pupil = node(SCNSphere(radius: 0.042), .black)
             pupil.position = SCNVector3(0, 0, 0.042)
@@ -286,7 +286,7 @@ enum TeddyBuilder {
         glasses.position = SCNVector3(0, 0.46, glassesZ)
         for side: CGFloat in [-1, 1] {
             let frame = node(rectFrameShape(), frameColor)
-            frame.position = SCNVector3(side * 0.20, 0, 0)
+            frame.position = SCNVector3(side * 0.215, 0, 0)
             glasses.addChildNode(frame)
 
             // 镜腿：从镜框外缘斜向后贴着太阳穴曲面分段铺设，末端沉进绒毛。
@@ -294,7 +294,7 @@ enum TeddyBuilder {
             let s = Float(side)
             let templeY: Float = 0.50 // 头部空间（镜框竖直中心偏上一点）
             // 横向偏移要浮在绒毛壳层(0.046)之上，埋进毛里会被发丝裁成虚线
-            var templePts: [SIMD3<Float>] = [[s * 0.355, templeY, Float(glassesZ)]]
+            var templePts: [SIMD3<Float>] = [[s * 0.37, templeY, Float(glassesZ)]]
             for z: Float in [0.30, 0.10] {
                 templePts.append([s * (headBlob.surfaceX(y: templeY, z: z) + 0.042), templeY, z])
             }
