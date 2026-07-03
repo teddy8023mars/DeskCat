@@ -132,16 +132,23 @@ enum TeddyBuilder {
             bodyBlob.subtract(blend: 0.01, color: suitSeamC, SDF.capsule(from: frontSeamPts[i], to: frontSeamPts[i + 1], radius: 0.018))
         }
 
+        let bodyBoundsMin = SIMD3<Float>(-0.95, -0.10, -0.70)
+        let bodyBoundsMax = SIMD3<Float>(0.95, 1.20, 0.95)
         let bodyGeometry = SDFMesh.geometry(
             blob: bodyBlob,
-            boundsMin: [-0.95, -0.10, -0.70],
-            boundsMax: [0.95, 1.20, 0.95],
+            boundsMin: bodyBoundsMin,
+            boundsMax: bodyBoundsMax,
             resolution: 104 // 手掌缝线和脚趾豆是细结构，需要更密的采样
         )
         let body = SCNNode(geometry: bodyGeometry)
         body.name = "Body"
         root.addChildNode(body)
-        FurShell.add(to: body, length: 0.05)
+        // 壳层毛发用低分辨率网格 + 剔除布料三角形：身体 ~70% 是西装（整层
+        // discard），16 层壳白画一遍全身是最大的 GPU 浪费源
+        let bodyShell = SDFMesh.furOnly(SDFMesh.mesh(
+            blob: bodyBlob, boundsMin: bodyBoundsMin, boundsMax: bodyBoundsMax, resolution: 64
+        ))
+        FurShell.addMerged(to: body, data: bodyShell, length: 0.05)
 
         // 西装扣子：前襟缝上的两颗（参考剧照在腰部）
         for y: Float in [0.46, 0.36] {
@@ -210,15 +217,21 @@ enum TeddyBuilder {
             from: philtrumTop, to: philtrumBottom, radius: 0.02
         ))
 
+        let headBoundsMin = SIMD3<Float>(-1.00, -0.50, -0.80)
+        let headBoundsMax = SIMD3<Float>(1.00, 1.15, 0.95)
         let headGeometry = SDFMesh.geometry(
             blob: headBlob,
-            boundsMin: [-1.00, -0.50, -0.80],
-            boundsMax: [1.00, 1.15, 0.95],
+            boundsMin: headBoundsMin,
+            boundsMax: headBoundsMax,
             resolution: 116 // 嘴缝凹槽很细，需要更高的采样密度
         )
         let headGeometryNode = SCNNode(geometry: headGeometry)
         head.addChildNode(headGeometryNode)
-        FurShell.add(to: headGeometryNode, length: 0.046)
+        // 头部全是绒毛，壳层同样只需低分辨率网格（发丝细节来自高度图）
+        let headShell = SDFMesh.mesh(
+            blob: headBlob, boundsMin: headBoundsMin, boundsMax: headBoundsMax, resolution: 64
+        )
+        FurShell.addMerged(to: headGeometryNode, data: headShell, length: 0.046)
 
         // 耳朵：大头顶角的小圆耳（缝上去的玩具耳朵本来就有折痕，且保留抖耳朵动画）
         var ears: [SCNNode] = []

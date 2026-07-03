@@ -1,3 +1,4 @@
+import Foundation
 import SceneKit
 import simd
 
@@ -10,8 +11,10 @@ struct SDFBlob {
         case subtract // 平滑减法（挖凹腔，比如嘴）
     }
 
+    /// 纯值类型（无闭包）：eval 是网格化的最热路径（百万次采样 × 每次遍历全部
+    /// part），闭包会在每次元素拷贝时 retain/release，串行慢、并行更是原子争用
     struct Part {
-        let sdf: (SIMD3<Float>) -> Float
+        let shape: SDFShape
         let color: SIMD3<Float>
         let blend: Float // smooth-min 的 k：越大过渡越肉
         let mode: Mode
@@ -19,20 +22,33 @@ struct SDFBlob {
 
     private(set) var parts: [Part] = []
 
-    mutating func add(blend: Float, color: SIMD3<Float>, _ sdf: @escaping (SIMD3<Float>) -> Float) {
-        parts.append(Part(sdf: sdf, color: color, blend: blend, mode: .union))
+    mutating func add(blend: Float, color: SIMD3<Float>, _ shape: SDFShape) {
+        parts.append(Part(shape: shape, color: color, blend: blend, mode: .union))
     }
 
-    mutating func subtract(blend: Float, color: SIMD3<Float>, _ sdf: @escaping (SIMD3<Float>) -> Float) {
-        parts.append(Part(sdf: sdf, color: color, blend: blend, mode: .subtract))
+    mutating func subtract(blend: Float, color: SIMD3<Float>, _ shape: SDFShape) {
+        parts.append(Part(shape: shape, color: color, blend: blend, mode: .subtract))
     }
 
     /// 距离 + 混合色（smooth-min/smooth-max 链式折叠）
     func eval(_ p: SIMD3<Float>) -> (d: Float, c: SIMD3<Float>) {
+        parts.withUnsafeBufferPointer { Self.eval($0, p) }
+    }
+
+    /// 批量求值入口：把 parts 缓冲区一次性借出。网格化在多核上并行采样，
+    /// 若每次 eval 都借数组（一对 retain/release），百万次采样同时敲一个
+    /// 引用计数原子变量，缓存行争用会让并行比串行还慢。
+    func withEval<R>(_ body: ((SIMD3<Float>) -> (d: Float, c: SIMD3<Float>)) -> R) -> R {
+        parts.withUnsafeBufferPointer { buf in
+            body { p in Self.eval(buf, p) }
+        }
+    }
+
+    private static func eval(_ buf: UnsafeBufferPointer<Part>, _ p: SIMD3<Float>) -> (d: Float, c: SIMD3<Float>) {
         var d = Float.greatestFiniteMagnitude
         var c = SIMD3<Float>(1, 1, 1)
-        for part in parts {
-            let pd = part.sdf(p)
+        for part in buf {
+            let pd = part.shape.distance(p)
             if d == .greatestFiniteMagnitude {
                 d = pd
                 c = part.color
@@ -84,23 +100,24 @@ struct SDFBlob {
 
 // MARK: - SDF 原语
 
-enum SDF {
-    static func sphere(center: SIMD3<Float>, radius: Float) -> (SIMD3<Float>) -> Float {
-        { p in simd_length(p - center) - radius }
-    }
+/// POD 原语：枚举分发代替闭包调用，热路径无引用计数
+enum SDFShape {
+    case sphere(center: SIMD3<Float>, radius: Float)
+    case ellipsoid(center: SIMD3<Float>, radii: SIMD3<Float>)
+    case capsule(a: SIMD3<Float>, b: SIMD3<Float>, radius: Float)
 
-    /// 椭球（iq 的近似距离公式，足够网格化使用）
-    static func ellipsoid(center: SIMD3<Float>, radii: SIMD3<Float>) -> (SIMD3<Float>) -> Float {
-        { p in
+    @inline(__always)
+    func distance(_ p: SIMD3<Float>) -> Float {
+        switch self {
+        case let .sphere(center, radius):
+            return simd_length(p - center) - radius
+        case let .ellipsoid(center, radii):
+            // iq 的近似距离公式，足够网格化使用
             let q = p - center
             let k0 = simd_length(q / radii)
             let k1 = simd_length(q / (radii * radii))
             return k0 * (k0 - 1.0) / max(k1, 1e-6)
-        }
-    }
-
-    static func capsule(from a: SIMD3<Float>, to b: SIMD3<Float>, radius: Float) -> (SIMD3<Float>) -> Float {
-        { p in
+        case let .capsule(a, b, radius):
             let pa = p - a
             let ba = b - a
             let h = max(0, min(1, simd_dot(pa, ba) / simd_dot(ba, ba)))
@@ -109,7 +126,31 @@ enum SDF {
     }
 }
 
+/// 建模 DSL：保持 `SDF.sphere(center:radius:)` 的调用外观
+enum SDF {
+    static func sphere(center: SIMD3<Float>, radius: Float) -> SDFShape {
+        .sphere(center: center, radius: radius)
+    }
+
+    static func ellipsoid(center: SIMD3<Float>, radii: SIMD3<Float>) -> SDFShape {
+        .ellipsoid(center: center, radii: radii)
+    }
+
+    static func capsule(from a: SIMD3<Float>, to b: SIMD3<Float>, radius: Float) -> SDFShape {
+        .capsule(a: a, b: b, radius: radius)
+    }
+}
+
 // MARK: - Surface Nets 网格化
+
+/// 网格化的原始数据（顶点色在线性空间）。壳层毛发需要在 CPU 侧
+/// 按顶点色筛掉布料三角形，所以数据和 SCNGeometry 的组装分开。
+struct SDFMeshData {
+    var positions: [SIMD3<Float>]
+    var normals: [SIMD3<Float>]
+    var colors: [SIMD3<Float>]
+    var indices: [Int32]
+}
 
 enum SDFMesh {
     /// 把 SDF 网格化成 SCNGeometry：顶点色 + 距离场梯度法线 + 绒毛边缘光着色器
@@ -119,16 +160,30 @@ enum SDFMesh {
         boundsMax: SIMD3<Float>,
         resolution n: Int
     ) -> SCNGeometry {
+        geometry(from: mesh(blob: blob, boundsMin: boundsMin, boundsMax: boundsMax, resolution: n))
+    }
+
+    /// 网格化为原始数据（顶点/法线/线性顶点色/索引）
+    static func mesh(
+        blob: SDFBlob,
+        boundsMin: SIMD3<Float>,
+        boundsMax: SIMD3<Float>,
+        resolution n: Int
+    ) -> SDFMeshData {
         let ns = n + 1 // 每轴采样数
         let step = (boundsMax - boundsMin) / Float(n)
 
-        // 采样距离场
+        // 采样距离场（各 x 切片互不相交，尴尬并行）
         var field = [Float](repeating: 0, count: ns * ns * ns)
-        for x in 0..<ns {
-            for y in 0..<ns {
-                for z in 0..<ns {
-                    let p = boundsMin + SIMD3(Float(x), Float(y), Float(z)) * step
-                    field[(x * ns + y) * ns + z] = blob.distance(p)
+        blob.withEval { eval in
+            field.withUnsafeMutableBufferPointer { buf in
+                DispatchQueue.concurrentPerform(iterations: ns) { x in
+                    for y in 0..<ns {
+                        for z in 0..<ns {
+                            let p = boundsMin + SIMD3(Float(x), Float(y), Float(z)) * step
+                            buf[(x * ns + y) * ns + z] = eval(p).d
+                        }
+                    }
                 }
             }
         }
@@ -256,16 +311,26 @@ enum SDFMesh {
             positions = smoothed
         }
 
-        // 法线：先算每顶点的距离场梯度作为朝向参考
+        // 法线：先算每顶点的距离场梯度作为朝向参考（逐顶点独立，按块并行）
         var gradients = [SIMD3<Float>](repeating: .zero, count: positions.count)
         let geps: Float = step.x
-        for i in 0..<positions.count {
-            let p = positions[i]
-            gradients[i] = SIMD3(
-                blob.distance(p + SIMD3(geps, 0, 0)) - blob.distance(p - SIMD3(geps, 0, 0)),
-                blob.distance(p + SIMD3(0, geps, 0)) - blob.distance(p - SIMD3(0, geps, 0)),
-                blob.distance(p + SIMD3(0, 0, geps)) - blob.distance(p - SIMD3(0, 0, geps))
-            )
+        let chunk = 512
+        let chunkCount = (positions.count + chunk - 1) / chunk
+        blob.withEval { eval in
+            positions.withUnsafeBufferPointer { pos in
+                gradients.withUnsafeMutableBufferPointer { grad in
+                    DispatchQueue.concurrentPerform(iterations: chunkCount) { c in
+                        for i in (c * chunk)..<min((c + 1) * chunk, pos.count) {
+                            let p = pos[i]
+                            grad[i] = SIMD3(
+                                eval(p + SIMD3(geps, 0, 0)).d - eval(p - SIMD3(geps, 0, 0)).d,
+                                eval(p + SIMD3(0, geps, 0)).d - eval(p - SIMD3(0, geps, 0)).d,
+                                eval(p + SIMD3(0, 0, geps)).d - eval(p - SIMD3(0, 0, geps)).d
+                            )
+                        }
+                    }
+                }
+            }
         }
         // 三角形面法线按面积加权累积；环绕方向不保证一致，
         // 累积前先按梯度统一每个面的朝向（否则相互抵消）
@@ -317,7 +382,37 @@ enum SDFMesh {
             ))
         }
 
-        return makeGeometry(positions: positions, normals: normals, colors: colors, indices: indices)
+        return SDFMeshData(positions: positions, normals: normals, colors: colors, indices: indices)
+    }
+
+    /// 只保留含绒毛顶点的三角形（供壳层毛发用：西装区域整层 discard，
+    /// 光栅化它们纯属白费；边界三角形保留，交给片元着色器裁）。
+    /// 顶点色在线性空间，布料判定与着色器一致：蓝分量明显大于红。
+    static func furOnly(_ data: SDFMeshData) -> SDFMeshData {
+        func isFur(_ c: SIMD3<Float>) -> Bool { (c.z - c.x) * 20 < 0.4 }
+        var remap = [Int32](repeating: -1, count: data.positions.count)
+        var out = SDFMeshData(positions: [], normals: [], colors: [], indices: [])
+        var t = 0
+        while t < data.indices.count {
+            let tri = [data.indices[t], data.indices[t + 1], data.indices[t + 2]]
+            t += 3
+            guard tri.contains(where: { isFur(data.colors[Int($0)]) }) else { continue }
+            for i in tri {
+                if remap[Int(i)] < 0 {
+                    remap[Int(i)] = Int32(out.positions.count)
+                    out.positions.append(data.positions[Int(i)])
+                    out.normals.append(data.normals[Int(i)])
+                    out.colors.append(data.colors[Int(i)])
+                }
+                out.indices.append(remap[Int(i)])
+            }
+        }
+        return out
+    }
+
+    /// 从网格数据组装 SCNGeometry（绒毛材质）
+    static func geometry(from data: SDFMeshData) -> SCNGeometry {
+        makeGeometry(positions: data.positions, normals: data.normals, colors: data.colors, indices: data.indices)
     }
 
     private static func makeGeometry(
