@@ -167,7 +167,22 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
             let breath = 1 + 0.02 * sin(t * 2.0)
             body.simdScale = simd_float3(repeating: breath)
         }
+
+        // —— 自适应帧率：只在"有事发生"时满帧，纯坐着呼吸时降到低帧省电 ——
+        // 头还在转、被鼠标吸引、正播空闲动作/眨眼/抖耳/小跳 → 活跃；否则空闲
+        let headMoving = abs(yawVel) > 0.02 || abs(pitchVel) > 0.02
+            || abs(yawAngle - targetYaw) > 0.01 || abs(pitchAngle - targetPitch) > 0.01
+        let busy = excited || time < idleEndAt || earTwitchStart >= 0
+            || time < blinkUntil || cat.hopNode.hasActions
+        let target = (headMoving || busy) ? Self.activeFPS : Self.idleFPS
+        if let view = renderer as? SCNView, view.preferredFramesPerSecond != target {
+            view.preferredFramesPerSecond = target
+        }
     }
+
+    /// 活跃时满帧（跟手、动画流畅）；空闲时仅维持缓慢呼吸，大幅省电
+    private static let activeFPS = 60
+    private static let idleFPS = 10
 
     /// 返回鼠标相对头部的偏航/俯仰角（弧度）和距离（屏幕点）
     private func mouseAngles() -> (yaw: Float, pitch: Float, distance: Float) {

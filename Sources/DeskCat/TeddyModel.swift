@@ -141,6 +141,7 @@ enum TeddyBuilder {
         let body = SCNNode(geometry: bodyGeometry)
         body.name = "Body"
         root.addChildNode(body)
+        FurShell.add(to: body, length: 0.05)
 
         // 西装扣子：前襟缝上的两颗（参考剧照在腰部）
         for y: Float in [0.46, 0.36] {
@@ -215,7 +216,9 @@ enum TeddyBuilder {
             boundsMax: [1.00, 1.15, 0.95],
             resolution: 116 // 嘴缝凹槽很细，需要更高的采样密度
         )
-        head.addChildNode(SCNNode(geometry: headGeometry))
+        let headGeometryNode = SCNNode(geometry: headGeometry)
+        head.addChildNode(headGeometryNode)
+        FurShell.add(to: headGeometryNode, length: 0.046)
 
         // 耳朵：大头顶角的小圆耳（缝上去的玩具耳朵本来就有折痕，且保留抖耳朵动画）
         var ears: [SCNNode] = []
@@ -224,6 +227,7 @@ enum TeddyBuilder {
             ear.scale = SCNVector3(1, 1, 0.55)
             ear.position = SCNVector3(side * 0.56, 0.86, -0.06)
             addFuzz(ear)
+            FurShell.add(to: ear, length: 0.035, density: 44, color: fur)
             head.addChildNode(ear)
             ears.append(ear)
         }

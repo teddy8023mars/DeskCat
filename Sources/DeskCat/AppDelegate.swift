@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         view.antialiasingMode = .multisampling4X
         view.rendersContinuously = true
         view.isPlaying = true
+        view.preferredFramesPerSecond = 60 // 上限 60；CatBrain 空闲时进一步降到 10
 
         view.onMoved = { [weak self] frame in
             self?.brain?.windowFrame = frame
