@@ -44,6 +44,12 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
     private var nextBlinkAt: TimeInterval = 0
     private var blinkUntil: TimeInterval = 0
 
+    // 眼球扫视（saccade）：空闲时随机瞟一眼
+    private var nextSaccadeAt: TimeInterval = 0
+    private var saccadeUntil: TimeInterval = 0
+    private var saccadeYaw: Float = 0
+    private var saccadePitch: Float = 0
+
     /// 头部跟随的虚拟距离（屏幕点），越小转头越敏感
     private let virtualDistance: Float = 480
 
@@ -118,10 +124,31 @@ final class CatBrain: NSObject, SCNSceneRendererDelegate {
             head.simdOrientation = local * cat.headRest
         }
 
-        // 眼神领先：头还没转到位时，眼珠先看向目标
+        // 眼神：领先 + 持续注视 + 空闲扫视
         if !cat.eyeNodes.isEmpty {
-            let leadYaw = max(-0.32, min(0.32, (targetYaw - yawAngle) * 0.9))
-            let leadPitch = max(-0.26, min(0.26, (targetPitch - pitchAngle) * 0.9))
+            // 领先：头还没转到位时，眼珠先看向目标（皮克斯式"眼先动，头后到"）
+            var gazeYaw = (targetYaw - yawAngle) * 0.9
+            var gazePitch = (targetPitch - pitchAngle) * 0.9
+            // 持续注视：头到位后瞳孔仍朝鼠标方向偏一点，不然眼神是"死"的
+            gazeYaw += targetYaw * 0.14
+            gazePitch += targetPitch * 0.14
+            // 扫视：空闲时偶尔快速瞟一眼别处再回来，像在想事情
+            if time > saccadeUntil, time > nextSaccadeAt {
+                if nextSaccadeAt == 0 {
+                    nextSaccadeAt = time + .random(in: 3...8)
+                } else {
+                    saccadeYaw = Float.random(in: -0.22...0.22)
+                    saccadePitch = Float.random(in: -0.12...0.12)
+                    saccadeUntil = time + .random(in: 0.25...0.6)
+                    nextSaccadeAt = time + .random(in: 3...8)
+                }
+            }
+            if time < saccadeUntil, !excited {
+                gazeYaw += saccadeYaw
+                gazePitch += saccadePitch
+            }
+            let leadYaw = max(-0.32, min(0.32, gazeYaw))
+            let leadPitch = max(-0.26, min(0.26, gazePitch))
             let eyeQuat = simd_quatf(angle: leadYaw, axis: [0, 1, 0])
                 * simd_quatf(angle: -leadPitch, axis: [1, 0, 0])
             for eye in cat.eyeNodes {
