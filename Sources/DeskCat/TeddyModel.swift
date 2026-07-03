@@ -165,21 +165,24 @@ enum TeddyBuilder {
         root.addChildNode(head)
 
         var headBlob = SDFBlob()
-        // 一整个宽圆的大块头——没有独立腮帮，宽度本身就是脸
-        headBlob.add(blend: 0.1, color: furC, SDF.ellipsoid(center: [0, 0.36, 0], radii: [0.80, 0.64, 0.60]))
+        // 一整个宽圆的大块头——没有独立腮帮，宽度本身就是脸。
+        // 前后深度压扁（z 0.60→0.52）：侧看后脑到眼镜的距离不能是鼻尖到眼镜的
+        // 三倍，否则整个头是气球、五官像贴纸
+        headBlob.add(blend: 0.1, color: furC, SDF.ellipsoid(center: [0, 0.36, 0], radii: [0.80, 0.62, 0.52]))
         // 眉毛（深色、舒展的缓拱——友好中性，不上挑不耷拉）
         for side: Float in [-1, 1] {
             headBlob.add(blend: 0.035, color: browC, SDF.ellipsoid(
                 center: [side * 0.25, 0.67, 0.50], radii: [0.165, 0.048, 0.055]
             ))
         }
-        // 奶油色口鼻：上窄下宽，带 Ted 标志性的厚下巴
-        // （侧看突出量收敛：前缘从头球面外 ~0.18 收到 ~0.08，贴脸不撅嘴）
+        // 奶油色口鼻：上窄下宽，带 Ted 标志性的厚下巴。
+        // 突出量是泰迪熊侧面轮廓的灵魂——完全收平侧看就是没脸的圆球；
+        // 之前"撅嘴"的病根是吻部太窄太尖，解法是加宽加圆而不是缩没
         headBlob.add(blend: 0.07, color: furLightC, SDF.ellipsoid(
-            center: [0, 0.10, 0.46], radii: [0.38, 0.28, 0.22]
+            center: [0, 0.11, 0.50], radii: [0.40, 0.30, 0.26]
         ))
         headBlob.add(blend: 0.08, color: furLightC, SDF.ellipsoid(
-            center: [0, -0.04, 0.44], radii: [0.30, 0.17, 0.18]
+            center: [0, -0.03, 0.47], radii: [0.32, 0.18, 0.20]
         ))
         // 脖子（藏进身体，转头时不露缝）
         headBlob.add(blend: 0.12, color: furC, SDF.capsule(from: [0, -0.12, 0], to: [0, 0.15, 0], radius: 0.32))
