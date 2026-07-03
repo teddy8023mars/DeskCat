@@ -309,7 +309,8 @@ enum SDFMesh {
             }
         }
 
-        // 拉普拉斯平滑：消除顶点沿采样网格分层造成的阶梯环纹
+        // Taubin λ|μ 平滑：正负步长交替，消除采样网格的阶梯环纹且不收缩体积
+        // （纯拉普拉斯每轮都往内缩，脚趾豆/领带这类细结构会被融掉一圈）
         var neighbors = [[Int32]](repeating: [], count: positions.count)
         var t = 0
         while t < indices.count {
@@ -319,13 +320,14 @@ enum SDFMesh {
             neighbors[Int(c)].append(contentsOf: [a, b])
             t += 3
         }
-        for _ in 0..<3 {
+        for pass in 0..<6 {
+            let factor: Float = pass % 2 == 0 ? 0.55 : -0.60
             var smoothed = positions
             for i in 0..<positions.count where !neighbors[i].isEmpty {
                 var avg = SIMD3<Float>(0, 0, 0)
                 for nb in neighbors[i] { avg += positions[Int(nb)] }
                 avg /= Float(neighbors[i].count)
-                smoothed[i] = positions[i] + (avg - positions[i]) * 0.55
+                smoothed[i] = positions[i] + (avg - positions[i]) * factor
             }
             positions = smoothed
         }
@@ -476,8 +478,14 @@ enum SDFMesh {
         material.lightingModel = .lambert
         material.diffuse.contents = NSColor.white // 与顶点色相乘
         material.isDoubleSided = true // 法线来自距离场梯度，与三角形环绕方向无关
-        material.shaderModifiers = [
-            .surface: """
+        material.shaderModifiers = [.surface: furSurfaceShader]
+        geometry.materials = [material]
+        return geometry
+    }
+
+    /// 绒毛/布料表面着色：纤维纹理 + 边缘逆光毛茸高光（布料压暗）。
+    /// 独立几何体（如 SCNSphere 耳朵）也要挂同一个，否则质感对不上
+    static let furSurfaceShader = """
             float dc_hash(float3 p) {
                 return fract(sin(dot(p, float3(12.9898, 78.233, 37.719))) * 43758.5453);
             }
@@ -506,8 +514,4 @@ enum SDFMesh {
             _surface.diffuse.rgb += rim * 0.28 * _surface.diffuse.rgb * (1.0 - cloth);
             _surface.diffuse.rgb *= 1.0 - 0.22 * rim * cloth;
             """
-        ]
-        geometry.materials = [material]
-        return geometry
-    }
 }

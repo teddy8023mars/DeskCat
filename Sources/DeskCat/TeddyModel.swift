@@ -352,13 +352,9 @@ enum TeddyBuilder {
         return SCNNode(geometry: geometry)
     }
 
-    /// 给独立绒毛节点加上和 SDF 网格一致的边缘绒毛高光
+    /// 给独立绒毛节点挂上和 SDF 网格同一个表面着色器：只有边缘光没有纤维
+    /// 纹理的话，耳朵会比头"光滑塑料"一截
     private static func addFuzz(_ node: SCNNode) {
-        node.geometry?.firstMaterial?.shaderModifiers = [
-            .surface: """
-            float fuzz = pow(1.0 - max(0.0, dot(normalize(_surface.view), _surface.normal)), 2.2);
-            _surface.diffuse.rgb += fuzz * 0.4 * _surface.diffuse.rgb;
-            """
-        ]
+        node.geometry?.firstMaterial?.shaderModifiers = [.surface: SDFMesh.furSurfaceShader]
     }
 }
