@@ -39,3 +39,27 @@ Swift + AppKit（透明无边框置顶窗口）+ SceneKit（3D 渲染）+ [GLTFK
 ## 模型授权
 
 猫模型 ["Cat" by Quaternius](https://poly.pizza/m/qKICY6xla2)，CC0 公有领域，致谢 Quaternius ❤️
+
+## English overview
+
+A native macOS desktop companion with a cursor-following head, idle animations, click interactions and a draggable position. Switch between a procedurally generated teddy bear and a cat from the menu bar.
+
+**macOS 13+ · Swift 5.9+ · AppKit · SceneKit · GLTFKit2**
+
+### Run locally
+
+```sh
+swift run
+./scripts/make_app.sh
+```
+
+The second command packages `DeskCat.app`. The build resolves the GLTFKit2 dependency through Swift Package Manager.
+
+### Explore the code
+
+- [Teddy model](Sources/DeskCat/TeddyModel.swift) and [SDF mesh generation](Sources/DeskCat/SDFMesh.swift): procedural geometry.
+- [Behavior](Sources/DeskCat/CatBrain.swift): cursor response and idle movement.
+- [Scene](Sources/DeskCat/CatScene.swift) and [window setup](Sources/DeskCat/AppDelegate.swift): rendering and desktop integration.
+- [Package configuration](Package.swift): dependencies and bundled model resources.
+
+The cat model is **Cat by Quaternius (CC0)**; see the original attribution above. The teddy bear is generated in code.
